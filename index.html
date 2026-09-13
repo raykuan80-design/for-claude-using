@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>實驗助教須知生成器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+:root{
+  --color-primary:#0b3d5c;
+  --color-primary-dark:#082a40;
+  --color-accent:#0d9488;
+  --color-accent-dark:#0f766e;
+  --color-bg:#f5f8fa;
+  --color-surface:#ffffff;
+  --color-text:#1a202c;
+  --color-muted:#5a6b7a;
+  --color-border:#dbe3e8;
+  --color-danger:#c53030;
+  --color-danger-bg:#fff5f5;
+  --color-warning:#b7791f;
+  --color-warning-bg:#fffbea;
+  --color-safe-bg:#f0fff4;
+  --radius:10px;
+  --font-sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font-sans);
+  background:var(--color-bg);
+  color:var(--color-text);
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--color-accent-dark);}
+header.app-header{
+  background:var(--color-primary);
+  color:#fff;
+  padding:1rem 1.25rem;
+}
+header.app-header h1{
+  margin:0;
+  font-size:1.35rem;
+}
+header.app-header p{
+  margin:.25rem 0 0;
+  font-size:.85rem;
+  color:#cfe3ec;
+}
+main.layout{
+  display:flex;
+  gap:1rem;
+  max-width:1700px;
+  margin:0 auto;
+  padding:1rem;
+  align-items:flex-start;
+}
+.panel{
+  flex:1 1 0;
+  min-width:0;
+  background:var(--color-surface);
+  border:1px solid var(--color-border);
+  border-radius:var(--radius);
+  padding:1rem;
+}
+.input-panel{flex:0 0 42%;}
+.preview-panel{flex:1 1 58%;}
+@media (max-width:960px){
+  main.layout{flex-direction:column;}
+  .input-panel,.preview-panel{flex:1 1 auto;width:100%;}
+}
+h2.panel-title{
+  margin:0 0 .75rem;
+  font-size:1.1rem;
+  color:var(--color-primary);
+  border-bottom:2px solid var(--color-accent);
+  padding-bottom:.4rem;
+}
+fieldset{
+  border:1px solid var(--color-border);
+  border-radius:var(--radius);
+  margin:0 0 1rem;
+  padding:.75rem .9rem 1rem;
+}
+legend{
+  font-weight:600;
+  color:var(--color-primary);
+  padding:0 .4rem;
+}
+label{
+  display:block;
+  font-size:.85rem;
+  font-weight:600;
+  margin:.6rem 0 .25rem;
+  color:var(--color-text);
+}
+label.inline{display:inline-flex;align-items:center;gap:.35rem;font-weight:500;margin-right:1rem;}
+input[type="text"],input[type="number"],input[type="url"],textarea,select{
+  width:100%;
+  padding:.5rem .6rem;
+  border:1px solid var(--color-border);
+  border-radius:6px;
+  font-family:inherit;
+  font-size:.9rem;
+  background:#fff;
+  color:var(--color-text);
+}
+textarea{resize:vertical;min-height:5.5rem;}
+#reportText{min-height:180px;}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible,[contenteditable="true"]:focus-visible{
+  outline:3px solid #90cdf4;
+  outline-offset:1px;
+}
+.field-row{display:flex;gap:.6rem;flex-wrap:wrap;}
+.field-row > div{flex:1 1 140px;}
+button{
+  font-family:inherit;
+  cursor:pointer;
+  border-radius:6px;
+  border:1px solid transparent;
+  padding:.55rem .9rem;
+  font-size:.85rem;
+  font-weight:600;
+  transition:filter .1s ease;
+}
+button:hover{filter:brightness(0.95);}
+button:disabled{opacity:.45;cursor:not-allowed;filter:none;}
+.btn-primary{background:var(--color-accent);color:#fff;}
+.btn-secondary{background:#fff;color:var(--color-primary);border-color:var(--color-primary);}
+.btn-outline{background:#fff;color:var(--color-muted);border-color:var(--color-border);}
+.btn-danger{background:#fff;color:var(--color-danger);border-color:var(--color-danger);}
+.btn-icon{background:none;border:none;color:var(--color-danger);font-size:.9rem;padding:.15rem .4rem;}
+button.small{font-size:.78rem;padding:.35rem .6rem;}
+.btn-row{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem;}
+.file-drop{
+  border:2px dashed var(--color-border);
+  border-radius:var(--radius);
+  padding:.9rem;
+  text-align:center;
+  margin-top:.4rem;
+}
+#fileInfo{
+  margin-top:.6rem;
+  font-size:.82rem;
+  background:#f7fafc;
+  border:1px solid var(--color-border);
+  border-radius:6px;
+  padding:.6rem .7rem;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+#fileInfo.error{background:var(--color-danger-bg);color:var(--color-danger);border-color:#feb2b2;}
+.hint{font-size:.78rem;color:var(--color-muted);margin-top:.2rem;}
+#aiSettings{display:none;border-left:3px solid var(--color-accent);padding-left:.7rem;margin-top:.5rem;}
+#aiSettings.show{display:block;}
+#gradeCustomWrap{display:none;margin-top:.4rem;}
+#gradeCustomWrap.show{display:block;}
+.progress-status{
+  margin-top:.6rem;
+  font-size:.85rem;
+  color:var(--color-accent-dark);
+  min-height:1.2rem;
+}
+.toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin-bottom:.9rem;
+  padding-bottom:.8rem;
+  border-bottom:1px solid var(--color-border);
+}
+#previewContainer{display:flex;flex-direction:column;gap:.75rem;}
+.empty-state{
+  text-align:center;
+  color:var(--color-muted);
+  padding:3rem 1rem;
+  border:1px dashed var(--color-border);
+  border-radius:var(--radius);
+}
+details.card{
+  border:1px solid var(--color-border);
+  border-radius:var(--radius);
+  background:#fff;
+  overflow:hidden;
+}
+details.card > summary{
+  cursor:pointer;
+  padding:.65rem .9rem;
+  background:#eef4f7;
+  font-weight:700;
+  color:var(--color-primary);
+  list-style:none;
+  display:flex;
+  align-items:center;
+  gap:.4rem;
+}
+details.card > summary::-webkit-details-marker{display:none;}
+details.card > summary::before{content:"▸";display:inline-block;transition:transform .1s;}
+details.card[open] > summary::before{transform:rotate(90deg);}
+.card-body{padding:.85rem .95rem 1.05rem;}
+.card-safety > summary{background:#fff3e0;color:#9c4221;border-left:5px solid var(--color-danger);}
+.card-confirm > summary{background:var(--color-warning-bg);color:var(--color-warning);border-left:5px solid var(--color-warning);}
+h3.sub-title{font-size:.92rem;color:var(--color-accent-dark);margin:.9rem 0 .35rem;}
+h3.sub-title:first-child{margin-top:0;}
+ul.plain-list{list-style:none;margin:0;padding:0;}
+ul.plain-list li{
+  display:flex;
+  align-items:flex-start;
+  gap:.4rem;
+  padding:.3rem .1rem;
+  border-bottom:1px dashed var(--color-border);
+}
+ul.plain-list li:last-child{border-bottom:none;}
+.editable{
+  flex:1;
+  min-width:0;
+  padding:.15rem .3rem;
+  border-radius:4px;
+  word-break:break-word;
+  white-space:pre-wrap;
+}
+[contenteditable="true"].editable{background:#fffef0;box-shadow:inset 0 0 0 1px #f0e2a3;}
+.badge{display:inline-block;font-size:.68rem;padding:.1rem .4rem;border-radius:10px;white-space:nowrap;flex-shrink:0;margin-top:.1rem;}
+.badge-given{background:#e6fffa;color:#0d9488;}
+.badge-inferred{background:#ebf4ff;color:#2b6cb0;}
+.badge-unconfirmed{background:#fffbea;color:#b7791f;}
+.table-scroll{overflow-x:auto;}
+table.data-table{width:100%;border-collapse:collapse;font-size:.85rem;min-width:560px;}
+table.data-table th,table.data-table td{border:1px solid var(--color-border);padding:.4rem .5rem;vertical-align:top;text-align:left;}
+table.data-table th{background:#eef4f7;color:var(--color-primary);}
+table.data-table tr.risk-high{background:var(--color-danger-bg);}
+table.data-table tr.risk-medium{background:#fffaf0;}
+table.data-table tr.risk-low{background:var(--color-safe-bg);}
+table.kv td{border:1px solid var(--color-border);padding:.4rem .5rem;}
+table.kv td.k{width:9rem;font-weight:700;color:var(--color-primary);background:#f7fafc;}
+.qa-list{display:flex;flex-direction:column;gap:.6rem;}
+.qa-item{border:1px solid var(--color-border);border-radius:8px;padding:.5rem .6rem;}
+.qa-q,.qa-a{display:flex;gap:.4rem;margin-top:.2rem;}
+.qa-q .label,.qa-a .label{flex-shrink:0;font-weight:600;color:var(--color-muted);}
+.checklist-item{display:flex;align-items:center;gap:.5rem;padding:.25rem 0;}
+.callout{border-radius:8px;padding:.65rem .8rem;margin:.4rem 0;font-size:.85rem;display:flex;gap:.5rem;}
+.callout-warning{background:var(--color-warning-bg);border:1px solid #f0d98c;color:#7b5b0a;}
+.callout-safe{background:var(--color-safe-bg);border:1px solid #c6f6d5;color:#276749;}
+.callout-icon{flex-shrink:0;}
+ol.confirm-list{margin:0;padding-left:1.2rem;}
+ol.confirm-list li{padding:.2rem 0;}
+.toast-wrap{position:fixed;bottom:1rem;right:1rem;z-index:999;display:flex;flex-direction:column;gap:.5rem;max-width:320px;}
+.toast{
+  padding:.6rem .85rem;
+  border-radius:8px;
+  color:#fff;
+  font-size:.85rem;
+  box-shadow:0 4px 12px rgba(0,0,0,.15);
+  animation:fadein .15s ease-in;
+}
+.toast.success{background:#0d9488;}
+.toast.error{background:#c53030;}
+.toast.info{background:#0b3d5c;}
+@keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+footer.app-footer{text-align:center;font-size:.78rem;color:var(--color-muted);padding:1rem;}
+.legend{display:flex;gap:.8rem;flex-wrap:wrap;font-size:.78rem;color:var(--color-muted);margin-top:.4rem;}
+@media (max-width:480px){
+  .input-panel,.preview-panel{padding:.75rem;}
+  header.app-header h1{font-size:1.1rem;}
+}
+@media print{
+  header.app-header,.input-panel,.toolbar,footer.app-footer,.toast-wrap,button{display:none !important;}
+  main.layout{display:block;padding:0;max-width:100%;}
+  .preview-panel{border:none;padding:0;width:100% !important;}
+  details.card{break-inside:avoid;border:1px solid #999;margin-bottom:.5rem;}
+  details.card > summary::before{display:none;}
+  body{background:#fff;}
+}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <h1>實驗助教須知生成器</h1>
+  <p>輸入或上傳實驗報告，自動整理成可直接使用的助教須知（本機整理／AI 增強兩種模式）</p>
+</header>
+
+<main class="layout">
+  <section class="panel input-panel">
+    <h2 class="panel-title">一、輸入實驗報告</h2>
+
+    <label for="reportText">實驗報告內容（可直接貼上）</label>
+    <textarea id="reportText" placeholder="請貼上完整實驗報告文字內容…"></textarea>
+
+    <div class="file-drop">
+      <label for="fileInput" style="margin:0;">或上傳檔案（.txt / .md / .pdf / .docx）</label>
+      <input type="file" id="fileInput" accept=".txt,.md,.pdf,.docx" style="margin-top:.5rem;">
+    </div>
+    <div id="fileInfo" hidden></div>
+
+    <div class="btn-row">
+      <button type="button" class="btn-secondary" id="btnLoadSample">載入範例</button>
+      <button type="button" class="btn-outline" id="btnClear">清除內容</button>
+    </div>
+
+    <h2 class="panel-title" style="margin-top:1.2rem;">二、課程資訊（選填）</h2>
+    <fieldset>
+      <legend>基本設定</legend>
+      <div class="field-row">
+        <div>
+          <label for="courseName">課程名稱</label>
+          <input type="text" id="courseName" placeholder="例如：國小自然科實驗課">
+        </div>
+        <div>
+          <label for="grade">學生年級</label>
+          <select id="grade">
+            <option value="">請選擇</option>
+            <option>國小低年級</option>
+            <option>國小中年級</option>
+            <option>國小高年級</option>
+            <option>國中</option>
+            <option>高中</option>
+            <option>大學</option>
+            <option value="自訂">自訂</option>
+          </select>
+          <div id="gradeCustomWrap">
+            <input type="text" id="gradeCustom" placeholder="請輸入自訂年級">
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div>
+          <label for="studentCount">學生人數</label>
+          <input type="number" min="0" id="studentCount">
+        </div>
+        <div>
+          <label for="groupCount">分組數量</label>
+          <input type="number" min="0" id="groupCount">
+        </div>
+        <div>
+          <label for="perGroupCount">每組人數</label>
+          <input type="number" min="0" id="perGroupCount">
+        </div>
+      </div>
+      <div class="field-row">
+        <div>
+          <label for="totalTime">課程總時間（分鐘）</label>
+          <input type="number" min="0" id="totalTime">
+        </div>
+        <div>
+          <label for="location">實驗場所</label>
+          <input type="text" id="location" placeholder="例如：自然科實驗室">
+        </div>
+        <div>
+          <label for="taCount">助教人數</label>
+          <input type="number" min="0" id="taCount">
+        </div>
+      </div>
+      <label for="specialNotes">特殊注意事項</label>
+      <textarea id="specialNotes" placeholder="例如：班上有學生對乳膠過敏、需特別留意…"></textarea>
+      <label for="detailLevel">輸出詳細程度</label>
+      <select id="detailLevel">
+        <option>精簡</option>
+        <option selected>標準</option>
+        <option>詳細</option>
+      </select>
+    </fieldset>
+
+    <fieldset>
+      <legend>生成模式</legend>
+      <label class="inline"><input type="radio" name="mode" value="local" checked> 本機整理模式（無需連線）</label>
+      <label class="inline"><input type="radio" name="mode" value="ai"> AI 增強模式（需自建代理端點）</label>
+      <div id="aiSettings">
+        <label for="aiEndpoint">代理伺服器端點網址</label>
+        <input type="url" id="aiEndpoint" placeholder="https://your-proxy.example.com/api/generate">
+        <label for="aiModel">模型名稱</label>
+        <input type="text" id="aiModel" placeholder="例如：由你的代理伺服器決定的模型代號">
+        <p class="hint">前端只會呼叫此端點，不會在程式中內嵌任何 API 金鑰。金鑰請保存於你自行架設的代理伺服器上。</p>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-outline" id="btnCopyPrompt">複製 AI 生成提示詞</button>
+      </div>
+      <p class="hint">可將此提示詞連同報告內容貼到 Claude 等對話介面，手動取得 JSON 結果後另行使用。</p>
+    </fieldset>
+
+    <div class="btn-row">
+      <button type="button" class="btn-primary" id="btnGenerate" style="flex:1;font-size:1rem;padding:.75rem;">生成助教須知</button>
+    </div>
+    <div class="progress-status" id="progressStatus" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="panel preview-panel">
+    <h2 class="panel-title">三、助教須知預覽</h2>
+    <div class="toolbar">
+      <button type="button" class="btn-secondary small" id="btnEditToggle">開啟編輯模式</button>
+      <button type="button" class="btn-outline small" id="btnRegenerate">重新生成</button>
+      <button type="button" class="btn-outline small" id="btnUndo">恢復生成前版本</button>
+      <button type="button" class="btn-outline small" id="btnSave">儲存</button>
+      <button type="button" class="btn-outline small" id="btnLoadLast">載入上次內容</button>
+      <button type="button" class="btn-outline small" id="btnCopyFull">複製完整須知</button>
+      <button type="button" class="btn-outline small" id="btnCopyMd">複製為 Markdown</button>
+      <button type="button" class="btn-outline small" id="btnExportMd">匯出 Markdown</button>
+      <button type="button" class="btn-outline small" id="btnExportJson">匯出 JSON</button>
+      <button type="button" class="btn-outline small" id="btnPrint">列印／另存 PDF</button>
+    </div>
+    <div class="legend">
+      <span><span class="badge badge-given">明確</span> 報告明確提供</span>
+      <span><span class="badge badge-inferred">整理</span> 依內容合理整理</span>
+      <span><span class="badge badge-unconfirmed">待確認</span> 報告未提供，需教師確認</span>
+    </div>
+    <div id="previewContainer" style="margin-top:.8rem;"></div>
+  </section>
+</main>
+
+<footer class="app-footer">實驗助教須知生成器 — 內容以實驗報告為主要依據，AI／本機整理結果僅供參考，請教師最終確認。</footer>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ===================== 工具函式 ===================== */
+function ce(tag, opts, children){
+  opts = opts || {};
+  var el = document.createElement(tag);
+  if(opts.class) el.className = opts.class;
+  if(opts.attrs){
+    for(var k in opts.attrs){ el.setAttribute(k, opts.attrs[k]); }
+  }
+  if(opts.text !== undefined) el.textContent = opts.text;
+  if(opts.on){
+    for(var ev in opts.on){ el.addEventListener(ev, opts.on[ev]); }
+  }
+  (children || []).forEach(function(c){ if(c) el.appendChild(c); });
+  return el;
+}
+function qs(sel, root){ return (root||document).querySelector(sel); }
+function val(sel){ var el = qs(sel); return el ? el.value.trim() : ''; }
+function getByPath(obj, path){
+  return path.split('.').reduce(function(o,k){ return (o==null) ? undefined : o[k]; }, obj);
+}
+function setByPath(obj, path, value){
+  var keys = path.split('.');
+  var o = obj;
+  for(var i=0;i<keys.length-1;i++){ o = o[keys[i]]; if(o==null) return; }
+  o[keys[keys.length-1]] = value;
+}
+function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+function truncate(str, n){ if(!str) return ''; return str.length>n ? str.slice(0,n).trim()+'…' : str; }
+function round2(n){ return Math.round(n*100)/100; }
+function dedupe(arr){ return Array.from(new Set(arr)); }
+
+function showToast(message, type){
+  type = type || 'info';
+  var wrap = document.getElementById('toastWrap');
+  var t = ce('div', {class:'toast '+type, text:message});
+  wrap.appendChild(t);
+  setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 3200);
+}
+
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(e){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position='fixed'; ta.style.left='-9999px';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    }catch(e2){ return false; }
+  }
+}
+
+function downloadBlob(filename, content, mime){
+  var blob = new Blob([content], {type: mime});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+}
+
+/* ===================== 狀態 ===================== */
+var state = {
+  data: null,
+  history: [],
+  editMode: false
+};
+
+/* ===================== 範例報告 ===================== */
+var SAMPLE_REPORT = [
+"實驗名稱：二氧化碳的製造與檢驗",
+"",
+"一、實驗目的",
+"1. 認識二氧化碳的製造方法。",
+"2. 學習使用酒精燈加熱與玻璃器材的操作技巧。",
+"3. 觀察並記錄石灰水變化，判斷氣體性質。",
+"",
+"二、實驗原理",
+"碳酸鈣與稀鹽酸反應會產生二氧化碳氣體，反應式為：CaCO3 + 2HCl → CaCl2 + H2O + CO2。二氧化碳通入澄清石灰水（Ca(OH)2）會使其變混濁，此現象稱為「石灰水混濁反應」，是檢驗二氧化碳常用的方法。",
+"",
+"三、器材與藥品",
+"1. 大理石（碳酸鈣）10公克",
+"2. 稀鹽酸（1M）50mL",
+"3. 錐形瓶 1個",
+"4. 玻璃導管與橡皮塞 1組",
+"5. 試管 2支",
+"6. 澄清石灰水 20mL",
+"7. 酒精燈 1個",
+"8. 火柴 1盒",
+"",
+"四、實驗步驟",
+"1. 將大理石放入錐形瓶中。",
+"2. 以量筒量取50mL稀鹽酸，小心倒入錐形瓶。",
+"3. 立即蓋上裝有導管的橡皮塞，將導管另一端置入盛有澄清石灰水的試管中。",
+"4. 觀察石灰水的變化並記錄。",
+"5. 反應結束後，關閉酒精燈並待器材冷卻後收拾。",
+"",
+"五、注意事項",
+"1. 稀鹽酸具腐蝕性，操作時應配戴護目鏡與手套。",
+"2. 酒精燈使用時應遠離易燃物，實驗後確認完全熄滅。",
+"3. 玻璃器材易碎，操作時應小心輕放。",
+"",
+"六、討論問題",
+"1. 為什麼澄清石灰水會變混濁？",
+"2. 除了石灰水，還有哪些方法可以檢驗二氧化碳？"
+].join("\n");
+
+/* ===================== 檔案解析 ===================== */
+async function extractTextFromFile(file){
+  var name = file.name.toLowerCase();
+  var ext = name.slice(name.lastIndexOf('.')+1);
+  if(ext==='txt' || ext==='md'){
+    return await file.text();
+  }
+  if(ext==='pdf'){
+    if(!window.pdfjsLib){
+      throw new Error('PDF 解析套件（PDF.js）未載入，請確認網路連線後重新整理頁面，或改用貼上文字。');
+    }
+    try{
+      if(pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc){
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      var buf = await file.arrayBuffer();
+      var pdf = await pdfjsLib.getDocument({data: buf}).promise;
+      var text = '';
+      for(var i=1;i<=pdf.numPages;i++){
+        var page = await pdf.getPage(i);
+        var content = await page.getTextContent();
+        text += content.items.map(function(it){ return it.str; }).join(' ') + '\n';
+      }
+      return text;
+    }catch(e){
+      throw new Error('PDF 內容解析失敗（可能為掃描影像或受保護檔案），請改用貼上文字。');
+    }
+  }
+  if(ext==='docx'){
+    if(!window.mammoth){
+      throw new Error('DOCX 解析套件（Mammoth.js）未載入，請確認網路連線後重新整理頁面，或改用貼上文字。');
+    }
+    try{
+      var buf2 = await file.arrayBuffer();
+      var result = await mammoth.extractRawText({arrayBuffer: buf2});
+      return result.value;
+    }catch(e){
+      throw new Error('DOCX 內容解析失敗，檔案可能已損毀，請改用貼上文字。');
+    }
+  }
+  throw new Error('不支援的檔案格式，請上傳 .txt、.md、.pdf 或 .docx 檔案，或改用貼上文字。');
+}
+
+function renderFileInfo(filename, text){
+  var el = document.getElementById('fileInfo');
+  el.hidden = false;
+  el.classList.remove('error');
+  el.textContent = '';
+  el.appendChild(ce('div', {text:'檔名：'+filename}));
+  el.appendChild(ce('div', {text:'字數：'+text.length+' 字'}));
+  el.appendChild(ce('div', {text:'內容預覽：'+truncate(text.replace(/\s+/g,' ').trim(),200)}));
+}
+function renderFileInfoError(filename, msg){
+  var el = document.getElementById('fileInfo');
+  el.hidden = false;
+  el.classList.add('error');
+  el.textContent = '';
+  el.appendChild(ce('div', {text:'檔名：'+filename}));
+  el.appendChild(ce('div', {text:'錯誤：'+msg}));
+}
+
+/* ===================== 本機整理：文字切段 ===================== */
+var HEADER_DEFS = [
+  {key:'objectives', re:/(教學)?目的|(教學|學習)目標/},
+  {key:'principles', re:/實驗原理|原理|理論(背景)?|背景知識/},
+  {key:'materials', re:/器材|材料|藥品|藥劑|設備清單|材料與器材/},
+  {key:'steps', re:/實驗步驟|操作步驟|實驗流程|操作方法|操作程序|做法/},
+  {key:'safety', re:/安全(注意事項|提醒)?|注意事項|危險|警告|防護/},
+  {key:'cleanup', re:/收拾|清理|善後|廢棄物|回收/},
+  {key:'troubleshooting', re:/常見(問題|錯誤)|問題排除|疑難排解/},
+  {key:'questions', re:/討論(問題)?|問題與討論|思考題|提問/},
+  {key:'schedule', re:/流程表|時間分配|課程流程|時間安排/}
+];
+
+function segmentReport(text){
+  var lines = text.split(/\r?\n/);
+  var sections = {intro:[],objectives:[],principles:[],materials:[],steps:[],safety:[],cleanup:[],troubleshooting:[],questions:[],schedule:[]};
+  var current = 'intro';
+  var titleLine = null;
+  lines.forEach(function(raw){
+    var line = raw.replace(/^#+\s*/,'').trim();
+    if(!line) return;
+    if(!titleLine){
+      var m = raw.match(/^(?:實驗名稱|報告名稱|主題)[:：]\s*(.+)$/);
+      if(m){ titleLine = m[1].trim(); return; }
+    }
+    var matched = null;
+    if(line.length<=20){
+      for(var i=0;i<HEADER_DEFS.length;i++){
+        if(HEADER_DEFS[i].re.test(line)){ matched = HEADER_DEFS[i].key; break; }
+      }
+    }
+    if(matched){ current = matched; return; }
+    sections[current].push(raw);
+  });
+  if(!titleLine){
+    var first = lines.find(function(l){ return l.trim(); });
+    if(first && first.trim().length<=30) titleLine = first.trim().replace(/^#+\s*/,'');
+  }
+  return {sections: sections, titleLine: titleLine};
+}
+
+function splitBullets(lines){
+  var bulletRe = /^\s*(?:[-*•‣▪]|\(?\d+[.)、]|[一二三四五六七八九十]+[、.)]|①|②|③|④|⑤|⑥|⑦|⑧|⑨|⑩)\s*/;
+  var items = [];
+  var current = '';
+  lines.forEach(function(line){
+    var trimmed = line.trim();
+    if(!trimmed) return;
+    if(bulletRe.test(trimmed)){
+      if(current) items.push(current.trim());
+      current = trimmed.replace(bulletRe,'').trim();
+    } else {
+      current = current ? current+' '+trimmed : trimmed;
+    }
+  });
+  if(current) items.push(current.trim());
+  return items.filter(Boolean);
+}
+
+function classifyObjective(text){
+  if(/觀察|記錄|比較|分析數據|判斷/.test(text)) return 'observation';
+  if(/操作|使用|測量|組裝|架設|進行|練習|動手/.test(text)) return 'skills';
+  return 'knowledge';
+}
+
+function parseMaterialLine(line){
+  var m = line.match(/^(.*?)[\s，,:：]*([\d]+(?:\.\d+)?)\s*([一-鿿A-Za-z%]*)(.*)$/);
+  if(m && m[1].trim()){
+    return {item: m[1].trim().replace(/[:：]$/,''), qty: m[2]+(m[3]||''), num: parseFloat(m[2]), unit: m[3]||'', noteRest: m[4].trim(), hasQty: true};
+  }
+  return {item: line.trim(), qty:'', num:null, unit:'', noteRest:'', hasQty:false};
+}
+
+function extractKeyTerms(text){
+  var terms = [];
+  var seen = {};
+  function add(t){ t=t.trim(); if(t && !seen[t] && t.length<=12){ seen[t]=true; terms.push(t); } }
+  var re1 = /[「『]([^」』]{2,12})[』」]/g, m;
+  while((m = re1.exec(text))){ add(m[1]); }
+  var re2 = /(?:稱為|又稱|所謂)[「]?([一-鿿A-Za-z0-9]{2,10})[」]?/g;
+  while((m = re2.exec(text))){ add(m[1]); }
+  var re3 = /\*\*([^*]{2,12})\*\*/g;
+  while((m = re3.exec(text))){ add(m[1]); }
+  return terms.slice(0,10);
+}
+
+var HAZARD_DICT = [
+  {re:/酒精燈|瓦斯|火源|燃燒|明火/, source:'火源／明火', level:'高'},
+  {re:/加熱|高溫|沸騰|烘烤/, source:'高溫加熱', level:'中'},
+  {re:/玻璃|燒杯|試管|燒瓶|量筒|玻璃導管/, source:'玻璃器材', level:'中'},
+  {re:/刀片|剪刀|尖銳|美工刀/, source:'尖銳物品', level:'中'},
+  {re:/電源|插座|電線|通電|馬達|電池/, source:'電器用品', level:'中'},
+  {re:/高壓|壓力鍋|加壓|氣壓/, source:'壓力設備', level:'高'},
+  {re:/鹽酸|硫酸|氫氧化|強酸|強鹼|腐蝕|毒性|有毒|揮發性|氨水/, source:'化學藥品', level:'高'}
+];
+
+function buildScheduleTemplate(totalTimeStr){
+  var total = parseInt(totalTimeStr,10);
+  if(!total || isNaN(total)) return null;
+  var phases = [
+    {label:'課前準備與安全提醒', pct:0.10},
+    {label:'講解原理與目的', pct:0.15},
+    {label:'操作實驗', pct:0.50},
+    {label:'收拾與清潔', pct:0.15},
+    {label:'統整與討論', pct:0.10}
+  ];
+  var acc = 0;
+  return phases.map(function(p){
+    var dur = Math.round(total*p.pct);
+    var start = acc; acc += dur;
+    return {time:'第 '+start+'-'+acc+' 分鐘', teacher:p.label, ta:'協助教師並巡視各組', student:'依教師與助教指示進行', note:'依實際狀況調整', tag:'inferred'};
+  });
+}
+
+function buildChecklistTemplate(materialsCount, taCount){
+  var beforeExtra = taCount ? ('本次共有 '+taCount+' 位助教，請確認分工。') : null;
+  var before = [
+    '確認器材與藥品清單（共 '+(materialsCount||'？')+' 項）是否備齊',
+    '檢查安全防護裝備（護目鏡、手套等）數量是否足夠',
+    '確認場地與桌面配置完成',
+    '確認相關設備（如加熱、電器器材）可正常運作（如適用）',
+    '熟悉實驗步驟與注意事項'
+  ];
+  if(beforeExtra) before.unshift(beforeExtra);
+  var during = [
+    '巡視各組操作是否符合步驟',
+    '留意學生是否確實配戴防護裝備',
+    '協助排除學生操作問題',
+    '注意安全風險，即時提醒與處理異常狀況',
+    '觀察並記錄各組進度'
+  ];
+  var after = [
+    '確認器材清點與歸還',
+    '確認廢棄物依規定分類處理',
+    '確認場地復原、桌面清潔',
+    '提醒學生完成學習單／心得記錄',
+    '回報異常狀況給教師'
+  ];
+  function toItems(arr){ return arr.map(function(t){ return {text:t, checked:false}; }); }
+  return {before: toItems(before), during: toItems(during), after: toItems(after)};
+}
+
+function defaultQuestions(){
+  return {
+    before: [{q:'你認為這個實驗可能會觀察到什麼現象？', a:'請依報告內容與實際觀察調整回答重點', tag:'inferred'}],
+    during: [{q:'請描述你目前觀察到的現象，與預期是否相符？', a:'請依報告內容與實際觀察調整回答重點', tag:'inferred'}],
+    after: [{q:'這個實驗結果與哪些科學概念有關？', a:'請依報告內容與實際觀察調整回答重點', tag:'inferred'}]
+  };
+}
+
+function buildStudentsInfo(settings){
+  var parts = [];
+  if(settings.studentCount) parts.push('學生共 '+settings.studentCount+' 人');
+  if(settings.groupCount) parts.push('分 '+settings.groupCount+' 組');
+  if(settings.perGroupCount) parts.push('每組 '+settings.perGroupCount+' 人');
+  return parts.length ? parts.join('，') : '（報告未提供，待確認）';
+}
+
+/* ===================== 本機整理：主流程 ===================== */
+function buildLocalGuide(reportText, settings){
+  var seg = segmentReport(reportText);
+  var sections = seg.sections;
+  var needsConfirmation = [];
+
+  var objBullets = splitBullets(sections.objectives);
+  var objectives = {knowledge:[], skills:[], observation:[]};
+  if(objBullets.length){
+    objBullets.forEach(function(b){ objectives[classifyObjective(b)].push({text:b, tag:'given'}); });
+  } else {
+    needsConfirmation.push('報告未提供教學目標，請教師補充知識、技能與觀察面向的學習目標。');
+  }
+
+  var principlesText = sections.principles.join('\n').trim();
+  var summary = principlesText;
+  if(settings.detailLevel==='精簡') summary = truncate(summary,150);
+  else if(settings.detailLevel==='標準') summary = truncate(summary,320);
+  var keyTerms = extractKeyTerms(principlesText);
+  if(!keyTerms.length) keyTerms = extractKeyTerms(reportText);
+  var keyTermsTagged = keyTerms.map(function(t){ return {text:t, tag: principlesText.indexOf(t)>=0 ? 'given' : 'inferred'}; });
+  if(!principlesText) needsConfirmation.push('報告未提供實驗原理說明，請教師補充相關科學概念。');
+  if(!keyTermsTagged.length) needsConfirmation.push('未能從報告中擷取關鍵科學名詞，建議教師補充重要概念清單。');
+
+  var preparation = {teacher:[], ta:[], venue:[], preTest:[]};
+  if(settings.specialNotes){ preparation.teacher.push({text:'教師特別提醒：'+settings.specialNotes, tag:'given'}); }
+  if(sections.materials.length) preparation.teacher.push({text:'課前備妥器材與藥品，並檢查數量是否足夠', tag:'inferred'});
+  if(sections.safety.length) preparation.teacher.push({text:'課前確認安全防護裝備到位', tag:'inferred'});
+  preparation.ta.push({text:'熟讀實驗報告與操作步驟，提前了解流程', tag:'inferred'});
+  preparation.venue.push({text:'依分組數量配置桌面與器材擺放位置', tag:'inferred'});
+  needsConfirmation.push('報告未提供詳細課前準備事項，以上為依內容合理推估，請教師確認並補充。');
+
+  var groupCount = parseInt(settings.groupCount,10);
+  var matLines = splitBullets(sections.materials);
+  var materials = [];
+  var materialsTotalConfirmed = true;
+  matLines.forEach(function(line){
+    var parsed = parseMaterialLine(line);
+    if(!parsed.hasQty){
+      materials.push({item:parsed.item, perGroup:'', total:'', spare:'', note:'報告未提供數量，待確認', tag:'unconfirmed'});
+      materialsTotalConfirmed = false;
+      return;
+    }
+    var isTotalExplicit = /全班|共|總共/.test(line);
+    if(isTotalExplicit){
+      materials.push({item:parsed.item, perGroup:'', total:parsed.qty, spare:'', note:parsed.noteRest, tag:'given'});
+    } else if(parsed.num!=null && groupCount){
+      var total = round2(parsed.num*groupCount)+parsed.unit;
+      materials.push({item:parsed.item, perGroup:parsed.qty, total:total, spare:'', note:parsed.noteRest, tag:'given'});
+    } else {
+      materials.push({item:parsed.item, perGroup:parsed.qty, total:'待確認（缺少分組數量）', spare:'', note:parsed.noteRest, tag:'given'});
+      materialsTotalConfirmed = false;
+    }
+  });
+  if(!materials.length) needsConfirmation.push('報告未提供器材與藥品清單，請教師補充。');
+  if(!materialsTotalConfirmed) needsConfirmation.push('部分器材數量或全班總量資訊不足，已標示待確認，請補充分組人數或確認總量。');
+
+  var stepLines = splitBullets(sections.steps);
+  var steps = stepLines.map(function(s){ return {action:s, observation:'', taNote:''}; });
+  if(!steps.length) needsConfirmation.push('報告未提供操作步驟，請教師補充，助教不應自行編排步驟。');
+  else needsConfirmation.push('報告未逐步說明各步驟之觀察重點與助教提醒，請教師與助教依經驗補充。');
+
+  var safety = [];
+  splitBullets(sections.safety).forEach(function(s){
+    var level = /腐蝕|強酸|強鹼|火|高溫|觸電|爆炸|毒/.test(s) ? '高' : '中';
+    safety.push({source:s, level:level, prevention:'請依此提醒採取對應防護措施', emergency:'如發生異常，立即停止操作並通報教師', ppe:'待教師確認', tag:'given'});
+  });
+  HAZARD_DICT.forEach(function(h){
+    if(h.re.test(reportText)){
+      safety.push({source:h.source, level:h.level, prevention:'請依此類風險採取對應防護措施，實際規範請依學校安全規定確認', emergency:'如發生異常，立即停止操作並通報教師／管理人員，依學校緊急應變程序處理', ppe:'待教師確認（建議依風險類型配戴適當防護裝備）', tag:'inferred'});
+    }
+  });
+  if(!safety.length) needsConfirmation.push('報告未明確描述安全風險，請教師確認是否需要額外安全提醒。');
+
+  var troubleshooting = [];
+  needsConfirmation.push('報告未提供常見錯誤與排除方法，建議教師與助教依經驗補充。');
+
+  var qBullets = splitBullets(sections.questions);
+  var questions;
+  if(qBullets.length){
+    questions = {before:[], during: qBullets.map(function(q){ return {q:q, a:'請依報告內容與實際觀察調整回答重點', tag:'given'}; }), after:[]};
+  } else {
+    questions = defaultQuestions();
+    needsConfirmation.push('報告未提供討論問題，以下為建議之通用引導提問，請教師確認是否合適。');
+  }
+
+  var cleanupLines = splitBullets(sections.cleanup);
+  var cleanup = {equipment:[], cleaning:[], venue:[], waste:[]};
+  cleanupLines.forEach(function(l){
+    if(/廢棄|回收|分類|倒入/.test(l)) cleanup.waste.push({text:l, tag:'given'});
+    else if(/清潔|沖洗|擦拭|洗淨/.test(l)) cleanup.cleaning.push({text:l, tag:'given'});
+    else if(/復原|歸位|排列/.test(l)) cleanup.venue.push({text:l, tag:'given'});
+    else cleanup.equipment.push({text:l, tag:'given'});
+  });
+  if(!cleanupLines.length) needsConfirmation.push('報告未提供收拾與清潔相關說明，請教師補充。');
+  if(!cleanup.waste.length) needsConfirmation.push('報告未說明廢棄物處理方式，不得自行判斷，請依學校規範與教師確認。');
+
+  var schedule = [];
+  var timeLineRe = /(\d{1,2}[:：]\d{2})\s*[-~至]\s*(\d{1,2}[:：]\d{2})\s*(.*)/;
+  var candidateLines = sections.schedule.length ? sections.schedule : reportText.split(/\r?\n/);
+  candidateLines.forEach(function(l){
+    var m = l.match(timeLineRe);
+    if(m) schedule.push({time:m[1]+'-'+m[2], teacher:m[3]||'', ta:'', student:'', note:'', tag:'given'});
+  });
+  if(!schedule.length){
+    var tmpl = buildScheduleTemplate(settings.totalTime);
+    if(tmpl){ schedule = tmpl; needsConfirmation.push('報告未提供詳細流程時間，以下時段為依課程總時間推算，請依實際狀況調整。'); }
+    else needsConfirmation.push('報告未提供流程時間，且未填寫課程總時間，無法排定流程表，請教師補充。');
+  }
+
+  var checklist = buildChecklistTemplate(materials.length, settings.taCount);
+
+  var basic = {
+    name: seg.titleLine || settings.courseName || '（報告未提供，待確認）',
+    grade: settings.grade || '（待確認）',
+    time: settings.totalTime ? (settings.totalTime+' 分鐘') : '（待確認）',
+    students: buildStudentsInfo(settings),
+    location: settings.location || '（待確認）'
+  };
+  if(!settings.grade) needsConfirmation.push('未填寫適用年級，請於左側設定或於此欄位補充。');
+  if(!settings.totalTime) needsConfirmation.push('未填寫課程總時間，部分流程規劃無法自動產生。');
+
+  return {
+    meta:{generatedAt:new Date().toISOString(), mode:'local', detailLevel:settings.detailLevel},
+    basic: basic,
+    objectives: objectives,
+    principles: {summary: summary || '', keyTerms: keyTermsTagged},
+    preparation: preparation,
+    materials: materials,
+    materialsTotalConfirmed: materialsTotalConfirmed,
+    schedule: schedule,
+    steps: steps,
+    safety: safety,
+    troubleshooting: troubleshooting,
+    questions: questions,
+    cleanup: cleanup,
+    checklist: checklist,
+    needsConfirmation: dedupe(needsConfirmation)
+  };
+}
+
+/* ===================== AI 增強模式 ===================== */
+function emptyGuide(){
+  return {
+    meta:{}, basic:{name:'',grade:'',time:'',students:'',location:''},
+    objectives:{knowledge:[],skills:[],observation:[]},
+    principles:{summary:'',keyTerms:[]},
+    preparation:{teacher:[],ta:[],venue:[],preTest:[]},
+    materials:[], materialsTotalConfirmed:false,
+    schedule:[], steps:[], safety:[], troubleshooting:[],
+    questions:{before:[],during:[],after:[]},
+    cleanup:{equipment:[],cleaning:[],venue:[],waste:[]},
+    checklist:{before:[],during:[],after:[]},
+    needsConfirmation:[]
+  };
+}
+function deepMerge(target, source){
+  if(Array.isArray(target)) return Array.isArray(source) ? source : target;
+  if(target && typeof target==='object' && source && typeof source==='object'){
+    var out = {};
+    Object.keys(target).forEach(function(k){
+      out[k] = deepMerge(target[k], source[k]!==undefined ? source[k] : target[k]);
+    });
+    return out;
+  }
+  return source!==undefined ? source : target;
+}
+function repairJsonString(s){
+  var t = String(s).trim();
+  t = t.replace(/^```json/i,'').replace(/^```/,'').replace(/```$/,'').trim();
+  var first = t.indexOf('{'), last = t.lastIndexOf('}');
+  if(first>=0 && last>first) t = t.substring(first, last+1);
+  try{ return JSON.parse(t); }
+  catch(e){ throw new Error('AI 回傳內容不是有效的 JSON，請重新生成'); }
+}
+function normalizeGuideData(raw){
+  var obj = raw;
+  if(typeof obj === 'string') obj = repairJsonString(obj);
+  if(obj && typeof obj === 'object'){
+    if(obj.data) obj = obj.data;
+    else if(obj.result) obj = obj.result;
+    else if(obj.guide) obj = obj.guide;
+  }
+  if(!obj || typeof obj !== 'object') throw new Error('AI 回傳格式無法解析，請重新生成');
+  var merged = deepMerge(emptyGuide(), obj);
+  merged.meta = merged.meta || {};
+  merged.meta.mode = 'ai';
+  merged.meta.generatedAt = new Date().toISOString();
+  if(!Array.isArray(merged.needsConfirmation)) merged.needsConfirmation = [];
+  return merged;
+}
+async function callAiEndpoint(reportText, settings){
+  if(!settings.aiEndpoint) throw new Error('請先於設定中填入代理伺服器端點網址');
+  var payload = {model: settings.aiModel || undefined, report: reportText, settings: settings};
+  var resp = await fetch(settings.aiEndpoint, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if(!resp.ok) throw new Error('伺服器回應錯誤（狀態碼 '+resp.status+'）');
+  var json;
+  try{ json = await resp.json(); }
+  catch(e){
+    var text = await resp.text().catch(function(){ return ''; });
+    json = repairJsonString(text);
+  }
+  return normalizeGuideData(json);
+}
+
+function buildAiPrompt(reportText, settings){
+  var schemaDoc = [
+    '請將下列實驗報告整理成「助教須知」，並「只」輸出一個 JSON 物件，不要包含任何說明文字或 Markdown code fence。',
+    'JSON 結構如下（陣列可為空陣列，但請保留所有鍵值）：',
+    '{',
+    '  "basic": {"name":"","grade":"","time":"","students":"","location":""},',
+    '  "objectives": {"knowledge":[{"text":"","tag":"given|inferred|unconfirmed"}],"skills":[...],"observation":[...]},',
+    '  "principles": {"summary":"","keyTerms":[{"text":"","tag":"..."}]},',
+    '  "preparation": {"teacher":[{"text":"","tag":"..."}],"ta":[...],"venue":[...],"preTest":[...]},',
+    '  "materials": [{"item":"","perGroup":"","total":"","spare":"","note":"","tag":"..."}],',
+    '  "materialsTotalConfirmed": true,',
+    '  "schedule": [{"time":"","teacher":"","ta":"","student":"","note":"","tag":"..."}],',
+    '  "steps": [{"action":"","observation":"","taNote":""}],',
+    '  "safety": [{"source":"","level":"高|中|低","prevention":"","emergency":"","ppe":"","tag":"..."}],',
+    '  "troubleshooting": [{"problem":"","cause":"","howToTell":"","fix":""}],',
+    '  "questions": {"before":[{"q":"","a":"","tag":"..."}],"during":[...],"after":[...]},',
+    '  "cleanup": {"equipment":[{"text":"","tag":"..."}],"cleaning":[...],"venue":[...],"waste":[...]},',
+    '  "checklist": {"before":[{"text":"","checked":false}],"during":[...],"after":[...]},',
+    '  "needsConfirmation": ["..."]',
+    '}',
+    '',
+    '規則：',
+    '1. 內容必須以下方實驗報告為主要依據，不可捏造報告中不存在的藥品、濃度、數量、反應結果或操作步驟。',
+    '2. 每個項目請用 tag 標示："given"＝報告明確提供、"inferred"＝依內容合理整理、"unconfirmed"＝報告未提供需教師確認。',
+    '3. 若資訊不足，請將該項標示為 unconfirmed，並在 needsConfirmation 中列出，不可自行補寫不存在的事實。',
+    '4. 涉及火源、高溫、玻璃器材、尖銳物、電器、壓力、化學藥品等危險因素，務必列入 safety，並給予適當風險等級，但不得宣稱任何物質「絕對安全」。',
+    '5. steps 僅能依報告原文步驟編列，不可自行新增報告沒有的實驗程序。',
+    '6. 文字風格：直接寫給助教閱讀、簡潔明確、保留原始單位與數值與專有名詞。',
+    '',
+    '課程資訊：',
+    '課程名稱：'+(settings.courseName||'（未提供）'),
+    '學生年級：'+(settings.grade||'（未提供）'),
+    '學生人數：'+(settings.studentCount||'（未提供）'),
+    '分組數量：'+(settings.groupCount||'（未提供）'),
+    '每組人數：'+(settings.perGroupCount||'（未提供）'),
+    '課程總時間（分鐘）：'+(settings.totalTime||'（未提供）'),
+    '實驗場所：'+(settings.location||'（未提供）'),
+    '助教人數：'+(settings.taCount||'（未提供）'),
+    '特殊注意事項：'+(settings.specialNotes||'（未提供）'),
+    '輸出詳細程度：'+(settings.detailLevel||'標準'),
+    '',
+    '=== 實驗報告內容開始 ===',
+    reportText,
+    '=== 實驗報告內容結束 ==='
+  ];
+  return schemaDoc.join('\n');
+}
+
+/* ===================== 渲染：共用元件 ===================== */
+function badge(tag){
+  var map = {given:['明確','badge-given'], inferred:['整理','badge-inferred'], unconfirmed:['待確認','badge-unconfirmed']};
+  var pair = map[tag] || map.unconfirmed;
+  return ce('span', {class:'badge '+pair[1], text:pair[0]});
+}
+function levelClass(level){
+  if(level==='高') return 'risk-high';
+  if(level==='低') return 'risk-low';
+  return 'risk-medium';
+}
+function warningBox(text){
+  return ce('div', {class:'callout callout-warning'}, [
+    ce('span', {class:'callout-icon', text:'⚠'}),
+    ce('span', {text:text})
+  ]);
+}
+function editableEl(tag, path, text, multiline){
+  var el = ce(tag, {
+    class:'editable',
+    attrs:{'data-path':path, contenteditable: state.editMode ? 'true':'false'},
+    text: text || ''
+  });
+  if(multiline) el.dataset.multiline = 'true';
+  return el;
+}
+function removeBtn(path, index){
+  return ce('button', {class:'btn-icon', attrs:{type:'button','data-action':'remove','data-path':path,'data-index':String(index)}, text:'✕'});
+}
+function addBtn(path, label){
+  return ce('button', {class:'btn-secondary small', attrs:{type:'button','data-action':'add','data-path':path}, text: label || '＋ 新增項目'});
+}
+
+function renderTagList(path, items){
+  var wrap = ce('div');
+  var ul = ce('ul', {class:'plain-list'});
+  (items||[]).forEach(function(item, i){
+    var li = ce('li');
+    li.appendChild(badge(item.tag));
+    li.appendChild(editableEl('span', path+'.'+i+'.text', item.text));
+    if(state.editMode) li.appendChild(removeBtn(path, i));
+    ul.appendChild(li);
+  });
+  wrap.appendChild(ul);
+  if(state.editMode) wrap.appendChild(addBtn(path));
+  return wrap;
+}
+
+function renderTable(columns, path, extraAfter){
+  var rows = getByPath(state.data, path) || [];
+  var table = ce('table', {class:'data-table'});
+  var thead = ce('thead');
+  var headRow = ce('tr');
+  columns.forEach(function(c){ headRow.appendChild(ce('th', {text:c.label})); });
+  if(state.editMode) headRow.appendChild(ce('th', {text:'操作'}));
+  thead.appendChild(headRow); table.appendChild(thead);
+  var tbody = ce('tbody');
+  rows.forEach(function(row, i){
+    var tr = ce('tr');
+    if(row.level) tr.classList.add(levelClass(row.level));
+    columns.forEach(function(c){
+      var td = ce('td');
+      if(c.key==='level'){
+        var sel = ce('select', {attrs:{'data-path':path+'.'+i+'.level'}});
+        ['高','中','低'].forEach(function(lv){
+          var optAttrs = {};
+          if(row.level===lv) optAttrs.selected = 'selected';
+          sel.appendChild(ce('option', {text:lv, attrs:optAttrs}));
+        });
+        sel.disabled = !state.editMode;
+        td.appendChild(sel);
+      } else if(c.key==='tag'){
+        td.appendChild(badge(row.tag));
+      } else {
+        td.appendChild(editableEl('div', path+'.'+i+'.'+c.key, row[c.key]));
+      }
+      tr.appendChild(td);
+    });
+    if(state.editMode){
+      var opTd = ce('td');
+      opTd.appendChild(removeBtn(path, i));
+      tr.appendChild(opTd);
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  var scrollWrap = ce('div', {class:'table-scroll'}, [table]);
+  var outer = ce('div', {}, [scrollWrap]);
+  if(state.editMode) outer.appendChild(addBtn(path, '＋ 新增一列'));
+  if(extraAfter) outer.appendChild(extraAfter);
+  return outer;
+}
+
+function renderQaList(path){
+  var items = getByPath(state.data, path) || [];
+  var container = ce('div', {class:'qa-list'});
+  items.forEach(function(item, i){
+    var block = ce('div', {class:'qa-item'});
+    block.appendChild(badge(item.tag));
+    block.appendChild(ce('div', {class:'qa-q'}, [
+      ce('span', {class:'label', text:'問題：'}),
+      editableEl('span', path+'.'+i+'.q', item.q)
+    ]));
+    block.appendChild(ce('div', {class:'qa-a'}, [
+      ce('span', {class:'label', text:'預期回答重點：'}),
+      editableEl('span', path+'.'+i+'.a', item.a)
+    ]));
+    if(state.editMode){
+      var row = ce('div', {style:'margin-top:.3rem;'});
+      row.appendChild(removeBtn(path, i));
+      block.appendChild(row);
+    }
+    container.appendChild(block);
+  });
+  var wrap = ce('div', {}, [container]);
+  if(state.editMode) wrap.appendChild(addBtn(path, '＋ 新增問題'));
+  return wrap;
+}
+
+function renderChecklist(path){
+  var items = getByPath(state.data, path) || [];
+  var wrap = ce('div');
+  items.forEach(function(item, i){
+    var label = ce('label', {class:'checklist-item'});
+    var cb = ce('input', {attrs:{type:'checkbox','data-path':path+'.'+i+'.checked'}});
+    cb.checked = !!item.checked;
+    label.appendChild(cb);
+    label.appendChild(editableEl('span', path+'.'+i+'.text', item.text));
+    if(state.editMode) label.appendChild(removeBtn(path, i));
+    wrap.appendChild(label);
+  });
+  if(state.editMode) wrap.appendChild(addBtn(path));
+  return wrap;
+}
+
+/* ===================== 渲染：13 個區塊 ===================== */
+function cardBasic(){
+  var b = state.data.basic;
+  var table = ce('table', {class:'kv'});
+  [['name','實驗名稱'],['grade','適用年級'],['time','課程時間'],['students','學生及分組資訊'],['location','實驗場所']].forEach(function(pair){
+    var tr = ce('tr');
+    tr.appendChild(ce('td', {class:'k', text:pair[1]}));
+    var valTd = ce('td');
+    valTd.appendChild(editableEl('div', 'basic.'+pair[0], b[pair[0]]));
+    tr.appendChild(valTd);
+    table.appendChild(tr);
+  });
+  return ce('details', {class:'card', attrs:{open:'open'}}, [
+    ce('summary', {text:'1. 實驗基本資料'}),
+    ce('div', {class:'card-body'}, [table])
+  ]);
+}
+function cardObjectives(){
+  var o = state.data.objectives;
+  var body = ce('div', {class:'card-body'});
+  body.appendChild(ce('h3', {class:'sub-title', text:'知識目標'}));
+  body.appendChild(renderTagList('objectives.knowledge', o.knowledge));
+  body.appendChild(ce('h3', {class:'sub-title', text:'操作技能'}));
+  body.appendChild(renderTagList('objectives.skills', o.skills));
+  body.appendChild(ce('h3', {class:'sub-title', text:'觀察重點'}));
+  body.appendChild(renderTagList('objectives.observation', o.observation));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'2. 教學目標'}), body]);
+}
+function cardPrinciples(){
+  var p = state.data.principles;
+  var body = ce('div', {class:'card-body'});
+  body.appendChild(ce('h3', {class:'sub-title', text:'原理摘要'}));
+  body.appendChild(editableEl('div', 'principles.summary', p.summary || '（報告未提供，待教師確認）', true));
+  body.appendChild(ce('h3', {class:'sub-title', text:'重要科學概念與關鍵名詞'}));
+  body.appendChild(renderTagList('principles.keyTerms', p.keyTerms));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'3. 實驗原理速覽'}), body]);
+}
+function cardPreparation(){
+  var p = state.data.preparation;
+  var body = ce('div', {class:'card-body'});
+  [['teacher','教師準備事項'],['ta','助教準備事項'],['venue','場地與桌面配置'],['preTest','需提前完成的測試']].forEach(function(pair){
+    body.appendChild(ce('h3', {class:'sub-title', text:pair[1]}));
+    body.appendChild(renderTagList('preparation.'+pair[0], p[pair[0]]));
+  });
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'4. 課前準備'}), body]);
+}
+function cardMaterials(){
+  var body = ce('div', {class:'card-body'});
+  if(!state.data.materialsTotalConfirmed){
+    body.appendChild(warningBox('部分器材數量或全班總量無法自動計算，已標示待確認，請補充分組人數或直接確認總量。'));
+  }
+  body.appendChild(renderTable([
+    {key:'item', label:'品項'}, {key:'perGroup', label:'每組數量'}, {key:'total', label:'全班總量'},
+    {key:'spare', label:'備用數量'}, {key:'note', label:'注意事項'}, {key:'tag', label:'標示'}
+  ], 'materials'));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'5. 器材與材料清單'}), body]);
+}
+function cardSchedule(){
+  var body = ce('div', {class:'card-body'});
+  body.appendChild(renderTable([
+    {key:'time', label:'時間'}, {key:'teacher', label:'教師活動'}, {key:'ta', label:'助教工作'},
+    {key:'student', label:'學生活動'}, {key:'note', label:'提醒事項'}, {key:'tag', label:'標示'}
+  ], 'schedule'));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'6. 課程流程表'}), body]);
+}
+function cardSteps(){
+  var body = ce('div', {class:'card-body'});
+  var steps = state.data.steps || [];
+  if(!steps.length) body.appendChild(warningBox('報告未提供操作步驟，請教師補充；助教不應自行編排步驟。'));
+  body.appendChild(renderTable([
+    {key:'action', label:'操作'}, {key:'observation', label:'觀察重點'}, {key:'taNote', label:'助教提醒'}
+  ], 'steps'));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'7. 詳細操作步驟'}), body]);
+}
+function cardSafety(){
+  var body = ce('div', {class:'card-body'});
+  body.appendChild(renderTable([
+    {key:'source', label:'危險來源'}, {key:'level', label:'風險程度'}, {key:'prevention', label:'預防方式'},
+    {key:'emergency', label:'異常處理原則'}, {key:'ppe', label:'個人防護裝備'}, {key:'tag', label:'標示'}
+  ], 'safety'));
+  body.appendChild(ce('p', {class:'hint', text:'無法確定的項目請依學校安全規範確認，不可自行認定任何物質或操作絕對安全。'}));
+  return ce('details', {class:'card card-safety', attrs:{open:'open'}}, [ce('summary', {text:'8. 安全與風險提醒 ⚠'}), body]);
+}
+function cardTroubleshooting(){
+  var body = ce('div', {class:'card-body'});
+  body.appendChild(renderTable([
+    {key:'problem', label:'可能出現的問題'}, {key:'cause', label:'可能原因'},
+    {key:'howToTell', label:'助教如何判斷'}, {key:'fix', label:'建議處理方式'}
+  ], 'troubleshooting'));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'9. 常見錯誤與排除方法'}), body]);
+}
+function cardQuestions(){
+  var body = ce('div', {class:'card-body'});
+  [['before','實驗前預測問題'],['during','實驗中觀察問題'],['after','實驗後統整問題']].forEach(function(pair){
+    body.appendChild(ce('h3', {class:'sub-title', text:pair[1]}));
+    body.appendChild(renderQaList('questions.'+pair[0]));
+  });
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'10. 引導提問'}), body]);
+}
+function cardCleanup(){
+  var c = state.data.cleanup;
+  var body = ce('div', {class:'card-body'});
+  [['equipment','器材清點'],['cleaning','清潔方式'],['venue','場地復原']].forEach(function(pair){
+    body.appendChild(ce('h3', {class:'sub-title', text:pair[1]}));
+    body.appendChild(renderTagList('cleanup.'+pair[0], c[pair[0]]));
+  });
+  body.appendChild(ce('h3', {class:'sub-title', text:'廢棄物分類'}));
+  if(!c.waste || !c.waste.length) body.appendChild(warningBox('報告未說明廢棄物處理方式，不得自行推測，請依學校規範與教師確認。'));
+  body.appendChild(renderTagList('cleanup.waste', c.waste));
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'11. 收拾與廢棄物處理'}), body]);
+}
+function cardChecklist(){
+  var body = ce('div', {class:'card-body'});
+  [['before','課前'],['during','課中'],['after','課後']].forEach(function(pair){
+    body.appendChild(ce('h3', {class:'sub-title', text:pair[1]}));
+    body.appendChild(renderChecklist('checklist.'+pair[0]));
+  });
+  return ce('details', {class:'card', attrs:{open:'open'}}, [ce('summary', {text:'12. 助教檢核表'}), body]);
+}
+function cardNeedsConfirmation(){
+  var items = state.data.needsConfirmation || [];
+  var body = ce('div', {class:'card-body'});
+  if(!items.length){
+    body.appendChild(ce('div', {class:'callout callout-safe'}, [ce('span', {class:'callout-icon', text:'✓'}), ce('span', {text:'目前沒有明顯待確認事項，仍建議教師最終覆核全文內容。'})]));
+  } else {
+    var ol = ce('ol', {class:'confirm-list'});
+    items.forEach(function(text, i){
+      var li = ce('li');
+      li.appendChild(editableEl('span', 'needsConfirmation.'+i, text));
+      if(state.editMode) li.appendChild(removeBtn('needsConfirmation', i));
+      ol.appendChild(li);
+    });
+    body.appendChild(ol);
+  }
+  if(state.editMode) body.appendChild(addBtn('needsConfirmation'));
+  return ce('details', {class:'card card-confirm', attrs:{open:'open'}}, [ce('summary', {text:'13. 待教師確認（'+items.length+'）'}), body]);
+}
+
+function render(){
+  var c = document.getElementById('previewContainer');
+  c.textContent = '';
+  if(!state.data){
+    c.appendChild(ce('div', {class:'empty-state', text:'尚未生成內容，請於左側輸入實驗報告後點擊「生成助教須知」。'}));
+    updateToolbarState();
+    return;
+  }
+  [cardBasic, cardObjectives, cardPrinciples, cardPreparation, cardMaterials, cardSchedule,
+   cardSteps, cardSafety, cardTroubleshooting, cardQuestions, cardCleanup, cardChecklist, cardNeedsConfirmation]
+   .forEach(function(fn){ c.appendChild(fn()); });
+  updateToolbarState();
+}
+
+function updateToolbarState(){
+  var hasData = !!state.data;
+  ['btnCopyFull','btnCopyMd','btnExportMd','btnExportJson','btnPrint','btnRegenerate'].forEach(function(id){
+    document.getElementById(id).disabled = !hasData;
+  });
+  document.getElementById('btnUndo').disabled = state.history.length===0;
+  document.getElementById('btnEditToggle').textContent = state.editMode ? '關閉編輯模式' : '開啟編輯模式';
+}
+
+/* ===================== 匯出：純文字 / Markdown / JSON ===================== */
+function tagLabel(tag){ return tag==='given' ? '[明確]' : (tag==='inferred' ? '[整理]' : '[待確認]'); }
+
+function buildMarkdown(d){
+  var L = [];
+  L.push('# 助教須知：'+(d.basic.name||''));
+  L.push('');
+  L.push('## 1. 實驗基本資料');
+  L.push('- 實驗名稱：'+d.basic.name);
+  L.push('- 適用年級：'+d.basic.grade);
+  L.push('- 課程時間：'+d.basic.time);
+  L.push('- 學生及分組資訊：'+d.basic.students);
+  L.push('- 實驗場所：'+d.basic.location);
+  L.push('');
+  L.push('## 2. 教學目標');
+  [['knowledge','知識目標'],['skills','操作技能'],['observation','觀察重點']].forEach(function(p){
+    L.push('### '+p[1]);
+    (d.objectives[p[0]]||[]).forEach(function(it){ L.push('- '+tagLabel(it.tag)+' '+it.text); });
+  });
+  L.push('');
+  L.push('## 3. 實驗原理速覽');
+  L.push(d.principles.summary || '（報告未提供，待教師確認）');
+  L.push('關鍵名詞：'+(d.principles.keyTerms||[]).map(function(t){ return t.text; }).join('、'));
+  L.push('');
+  L.push('## 4. 課前準備');
+  [['teacher','教師準備事項'],['ta','助教準備事項'],['venue','場地與桌面配置'],['preTest','需提前完成的測試']].forEach(function(p){
+    L.push('### '+p[1]);
+    (d.preparation[p[0]]||[]).forEach(function(it){ L.push('- '+tagLabel(it.tag)+' '+it.text); });
+  });
+  L.push('');
+  L.push('## 5. 器材與材料清單');
+  L.push('| 品項 | 每組數量 | 全班總量 | 備用數量 | 注意事項 | 標示 |');
+  L.push('|---|---|---|---|---|---|');
+  (d.materials||[]).forEach(function(m){ L.push('| '+m.item+' | '+m.perGroup+' | '+m.total+' | '+m.spare+' | '+m.note+' | '+tagLabel(m.tag)+' |'); });
+  L.push('');
+  L.push('## 6. 課程流程表');
+  L.push('| 時間 | 教師活動 | 助教工作 | 學生活動 | 提醒事項 |');
+  L.push('|---|---|---|---|---|');
+  (d.schedule||[]).forEach(function(s){ L.push('| '+s.time+' | '+s.teacher+' | '+s.ta+' | '+s.student+' | '+s.note+' |'); });
+  L.push('');
+  L.push('## 7. 詳細操作步驟');
+  (d.steps||[]).forEach(function(s,i){ L.push((i+1)+'. '+s.action+(s.observation?'（觀察重點：'+s.observation+'）':'')+(s.taNote?'（助教提醒：'+s.taNote+'）':'')); });
+  L.push('');
+  L.push('## 8. 安全與風險提醒');
+  (d.safety||[]).forEach(function(s){ L.push('- ['+s.level+'風險] '+s.source+'｜預防：'+s.prevention+'｜異常處理：'+s.emergency+'｜防護裝備：'+s.ppe); });
+  L.push('');
+  L.push('## 9. 常見錯誤與排除方法');
+  (d.troubleshooting||[]).forEach(function(t){ L.push('- 問題：'+t.problem+'｜原因：'+t.cause+'｜判斷方式：'+t.howToTell+'｜處理方式：'+t.fix); });
+  L.push('');
+  L.push('## 10. 引導提問');
+  [['before','實驗前預測問題'],['during','實驗中觀察問題'],['after','實驗後統整問題']].forEach(function(p){
+    L.push('### '+p[1]);
+    (d.questions[p[0]]||[]).forEach(function(q){ L.push('- Q：'+q.q+'　A（重點）：'+q.a); });
+  });
+  L.push('');
+  L.push('## 11. 收拾與廢棄物處理');
+  [['equipment','器材清點'],['cleaning','清潔方式'],['venue','場地復原'],['waste','廢棄物分類']].forEach(function(p){
+    L.push('### '+p[1]);
+    (d.cleanup[p[0]]||[]).forEach(function(it){ L.push('- '+tagLabel(it.tag)+' '+it.text); });
+  });
+  L.push('');
+  L.push('## 12. 助教檢核表');
+  [['before','課前'],['during','課中'],['after','課後']].forEach(function(p){
+    L.push('### '+p[1]);
+    (d.checklist[p[0]]||[]).forEach(function(it){ L.push('- ['+(it.checked?'x':' ')+'] '+it.text); });
+  });
+  L.push('');
+  L.push('## 13. 待教師確認');
+  (d.needsConfirmation||[]).forEach(function(t){ L.push('- '+t); });
+  return L.join('\n');
+}
+
+function buildPlainText(d){
+  return buildMarkdown(d)
+    .replace(/^#+\s*/gm,'')
+    .replace(/^\|.*\|$/gm, function(line){ return line.replace(/\|/g,'  ').trim(); })
+    .replace(/\*\*/g,'');
+}
+
+/* ===================== 設定表單存取 ===================== */
+function getSettings(){
+  return {
+    courseName: val('#courseName'),
+    grade: (val('#grade')==='自訂' ? val('#gradeCustom') : val('#grade')),
+    studentCount: val('#studentCount'),
+    groupCount: val('#groupCount'),
+    perGroupCount: val('#perGroupCount'),
+    totalTime: val('#totalTime'),
+    location: val('#location'),
+    taCount: val('#taCount'),
+    specialNotes: val('#specialNotes'),
+    detailLevel: val('#detailLevel'),
+    mode: qs('input[name="mode"]:checked').value,
+    aiEndpoint: val('#aiEndpoint'),
+    aiModel: val('#aiModel')
+  };
+}
+function applySettingsToForm(form){
+  form = form || {};
+  qs('#courseName').value = form.courseName || '';
+  var gradeOptions = Array.from(qs('#grade').options).map(function(o){ return o.value; });
+  if(gradeOptions.indexOf(form.grade) >= 0){
+    qs('#grade').value = form.grade;
+    qs('#gradeCustomWrap').classList.remove('show');
+  } else if(form.grade){
+    qs('#grade').value = '自訂';
+    qs('#gradeCustom').value = form.grade;
+    qs('#gradeCustomWrap').classList.add('show');
+  }
+  qs('#studentCount').value = form.studentCount || '';
+  qs('#groupCount').value = form.groupCount || '';
+  qs('#perGroupCount').value = form.perGroupCount || '';
+  qs('#totalTime').value = form.totalTime || '';
+  qs('#location').value = form.location || '';
+  qs('#taCount').value = form.taCount || '';
+  qs('#specialNotes').value = form.specialNotes || '';
+  if(form.detailLevel) qs('#detailLevel').value = form.detailLevel;
+  if(form.mode){
+    var radio = qs('input[name="mode"][value="'+form.mode+'"]');
+    if(radio){ radio.checked = true; qs('#aiSettings').classList.toggle('show', form.mode==='ai'); }
+  }
+  qs('#aiEndpoint').value = form.aiEndpoint || '';
+  qs('#aiModel').value = form.aiModel || '';
+}
+
+/* ===================== 產生流程 ===================== */
+function showProgress(msg){ document.getElementById('progressStatus').textContent = msg || ''; }
+
+function pushHistory(){
+  if(state.data){
+    state.history.push(deepClone(state.data));
+    if(state.history.length>5) state.history.shift();
+  }
+}
+
+async function handleGenerate(){
+  var reportText = qs('#reportText').value.trim();
+  if(!reportText){
+    showToast('請先輸入或上傳實驗報告內容','error');
+    qs('#reportText').focus();
+    return;
+  }
+  var settings = getSettings();
+  var btn = document.getElementById('btnGenerate');
+  btn.disabled = true;
+  try{
+    var data;
+    if(settings.mode==='ai'){
+      showProgress('正在呼叫 AI 服務…');
+      try{
+        data = await callAiEndpoint(reportText, settings);
+        showToast('AI 生成完成','success');
+      }catch(err){
+        showToast('AI 生成失敗：'+err.message+'，已改用本機整理模式','error');
+        showProgress('AI 呼叫失敗，改用本機整理模式整理中…');
+        data = buildLocalGuide(reportText, settings);
+      }
+    } else {
+      showProgress('正在整理內容…');
+      await new Promise(function(r){ setTimeout(r, 150); });
+      data = buildLocalGuide(reportText, settings);
+      showToast('助教須知已生成','success');
+    }
+    pushHistory();
+    state.data = data;
+    render();
+  } finally {
+    btn.disabled = false;
+    showProgress('');
+  }
+}
+
+function handleUndo(){
+  if(!state.history.length){ showToast('沒有可恢復的版本','error'); return; }
+  state.data = state.history.pop();
+  render();
+  showToast('已恢復生成前版本','success');
+}
+
+/* ===================== 儲存 / 載入 ===================== */
+var STORAGE_KEY = 'taGuideGenerator.v1';
+function saveToStorage(){
+  if(!state.data){ showToast('尚無生成內容可儲存','error'); return; }
+  var payload = {form:getSettings(), reportText: qs('#reportText').value, data: state.data, savedAt: Date.now()};
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    showToast('已儲存至瀏覽器','success');
+  }catch(e){
+    showToast('儲存失敗：瀏覽器儲存空間可能已滿','error');
+  }
+}
+function loadFromStorage(){
+  var raw;
+  try{ raw = localStorage.getItem(STORAGE_KEY); }catch(e){ raw = null; }
+  if(!raw){ showToast('尚未有已儲存的內容','error'); return; }
+  try{
+    var payload = JSON.parse(raw);
+    qs('#reportText').value = payload.reportText || '';
+    applySettingsToForm(payload.form || {});
+    pushHistory();
+    state.data = payload.data;
+    render();
+    showToast('已載入上次儲存的內容','success');
+  }catch(e){
+    showToast('讀取失敗，儲存的資料可能已損毀','error');
+  }
+}
+
+/* ===================== 事件綁定 ===================== */
+function initEvents(){
+  qs('#grade').addEventListener('change', function(){
+    qs('#gradeCustomWrap').classList.toggle('show', this.value==='自訂');
+  });
+  Array.from(document.querySelectorAll('input[name="mode"]')).forEach(function(r){
+    r.addEventListener('change', function(){
+      qs('#aiSettings').classList.toggle('show', qs('input[name="mode"]:checked').value==='ai');
+    });
+  });
+
+  qs('#fileInput').addEventListener('change', async function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    try{
+      showToast('正在讀取檔案…','info');
+      var text = await extractTextFromFile(file);
+      if(!text || !text.trim()) throw new Error('未能從檔案中擷取任何文字內容');
+      qs('#reportText').value = text;
+      renderFileInfo(file.name, text);
+      showToast('檔案讀取成功','success');
+    }catch(err){
+      renderFileInfoError(file.name, err.message);
+      showToast('檔案解析失敗：'+err.message,'error');
+    }finally{
+      e.target.value = '';
+    }
+  });
+
+  qs('#btnLoadSample').addEventListener('click', function(){
+    qs('#reportText').value = SAMPLE_REPORT;
+    renderFileInfo('範例報告（內建）', SAMPLE_REPORT);
+    showToast('已載入範例報告','success');
+  });
+  qs('#btnClear').addEventListener('click', function(){
+    qs('#reportText').value = '';
+    var el = document.getElementById('fileInfo');
+    el.hidden = true; el.textContent = '';
+    showToast('已清除報告內容','success');
+  });
+
+  qs('#btnCopyPrompt').addEventListener('click', async function(){
+    var reportText = qs('#reportText').value.trim();
+    if(!reportText){ showToast('請先輸入或上傳實驗報告內容','error'); return; }
+    var prompt = buildAiPrompt(reportText, getSettings());
+    var ok = await copyText(prompt);
+    showToast(ok ? '已複製 AI 生成提示詞' : '複製失敗，請手動選取複製', ok ? 'success' : 'error');
+  });
+
+  qs('#btnGenerate').addEventListener('click', handleGenerate);
+  qs('#btnRegenerate').addEventListener('click', handleGenerate);
+  qs('#btnUndo').addEventListener('click', handleUndo);
+  qs('#btnSave').addEventListener('click', saveToStorage);
+  qs('#btnLoadLast').addEventListener('click', loadFromStorage);
+
+  qs('#btnEditToggle').addEventListener('click', function(){
+    state.editMode = !state.editMode;
+    render();
+  });
+
+  qs('#btnCopyFull').addEventListener('click', async function(){
+    if(!state.data) return;
+    var ok = await copyText(buildPlainText(state.data));
+    showToast(ok ? '已複製完整助教須知' : '複製失敗，請手動選取複製', ok ? 'success':'error');
+  });
+  qs('#btnCopyMd').addEventListener('click', async function(){
+    if(!state.data) return;
+    var ok = await copyText(buildMarkdown(state.data));
+    showToast(ok ? '已複製 Markdown 內容' : '複製失敗，請手動選取複製', ok ? 'success':'error');
+  });
+  qs('#btnExportMd').addEventListener('click', function(){
+    if(!state.data) return;
+    downloadBlob('助教須知.md', buildMarkdown(state.data), 'text/markdown;charset=utf-8');
+    showToast('已匯出 Markdown 檔','success');
+  });
+  qs('#btnExportJson').addEventListener('click', function(){
+    if(!state.data) return;
+    downloadBlob('助教須知.json', JSON.stringify(state.data, null, 2), 'application/json;charset=utf-8');
+    showToast('已匯出 JSON 檔','success');
+  });
+  qs('#btnPrint').addEventListener('click', function(){
+    if(!state.data) return;
+    var detailsEls = Array.from(document.querySelectorAll('#previewContainer details'));
+    var prevStates = detailsEls.map(function(d){ return d.open; });
+    detailsEls.forEach(function(d){ d.open = true; });
+    function restore(){
+      detailsEls.forEach(function(d,i){ d.open = prevStates[i]; });
+      window.removeEventListener('afterprint', restore);
+    }
+    window.addEventListener('afterprint', restore);
+    window.print();
+  });
+
+  var preview = document.getElementById('previewContainer');
+  preview.addEventListener('focusout', function(e){
+    var el = e.target;
+    if(el.matches && el.matches('[data-path][contenteditable="true"]')){
+      var path = el.getAttribute('data-path');
+      var value = el.dataset.multiline==='true' ? el.innerText.replace(/\n{3,}/g,'\n\n').trim() : el.textContent.replace(/\s+/g,' ').trim();
+      setByPath(state.data, path, value);
+    }
+  });
+  preview.addEventListener('keydown', function(e){
+    var el = e.target;
+    if(e.key==='Enter' && el.matches && el.matches('[data-path][contenteditable="true"]') && el.dataset.multiline!=='true'){
+      e.preventDefault();
+      el.blur();
+    }
+  });
+  preview.addEventListener('change', function(e){
+    var el = e.target;
+    if(el.matches && el.matches('input[type="checkbox"][data-path]')){
+      setByPath(state.data, el.getAttribute('data-path'), el.checked);
+    } else if(el.matches && el.matches('select[data-path]')){
+      setByPath(state.data, el.getAttribute('data-path'), el.value);
+      render();
+    }
+  });
+  preview.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    var action = btn.getAttribute('data-action');
+    var path = btn.getAttribute('data-path');
+    if(action==='remove'){
+      var idx = parseInt(btn.getAttribute('data-index'),10);
+      var arr = getByPath(state.data, path);
+      if(Array.isArray(arr)){ arr.splice(idx,1); render(); }
+    } else if(action==='add'){
+      var arr2 = getByPath(state.data, path);
+      if(Array.isArray(arr2)){ arr2.push(defaultItemFor(path)); render(); }
+    }
+  });
+}
+
+var ITEM_DEFAULTS = {
+  'objectives.knowledge': function(){ return {text:'', tag:'unconfirmed'}; },
+  'objectives.skills': function(){ return {text:'', tag:'unconfirmed'}; },
+  'objectives.observation': function(){ return {text:'', tag:'unconfirmed'}; },
+  'principles.keyTerms': function(){ return {text:'', tag:'unconfirmed'}; },
+  'preparation.teacher': function(){ return {text:'', tag:'unconfirmed'}; },
+  'preparation.ta': function(){ return {text:'', tag:'unconfirmed'}; },
+  'preparation.venue': function(){ return {text:'', tag:'unconfirmed'}; },
+  'preparation.preTest': function(){ return {text:'', tag:'unconfirmed'}; },
+  'materials': function(){ return {item:'', perGroup:'', total:'', spare:'', note:'', tag:'unconfirmed'}; },
+  'schedule': function(){ return {time:'', teacher:'', ta:'', student:'', note:'', tag:'unconfirmed'}; },
+  'steps': function(){ return {action:'', observation:'', taNote:''}; },
+  'safety': function(){ return {source:'', level:'中', prevention:'', emergency:'', ppe:'', tag:'unconfirmed'}; },
+  'troubleshooting': function(){ return {problem:'', cause:'', howToTell:'', fix:''}; },
+  'questions.before': function(){ return {q:'', a:'', tag:'unconfirmed'}; },
+  'questions.during': function(){ return {q:'', a:'', tag:'unconfirmed'}; },
+  'questions.after': function(){ return {q:'', a:'', tag:'unconfirmed'}; },
+  'cleanup.equipment': function(){ return {text:'', tag:'unconfirmed'}; },
+  'cleanup.cleaning': function(){ return {text:'', tag:'unconfirmed'}; },
+  'cleanup.venue': function(){ return {text:'', tag:'unconfirmed'}; },
+  'cleanup.waste': function(){ return {text:'', tag:'unconfirmed'}; },
+  'checklist.before': function(){ return {text:'', checked:false}; },
+  'checklist.during': function(){ return {text:'', checked:false}; },
+  'checklist.after': function(){ return {text:'', checked:false}; },
+  'needsConfirmation': function(){ return ''; }
+};
+function defaultItemFor(path){
+  var factory = ITEM_DEFAULTS[path];
+  return factory ? factory() : {text:''};
+}
+
+/* ===================== 初始化 ===================== */
+function init(){
+  initEvents();
+  render();
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+})();
+</script>
+</body>
+</html>
