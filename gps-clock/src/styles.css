@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 :root {
   --bg: #f6f7f9; --surface: #fff; --text: #1d2228; --muted: #6b7380; --line: #e2e5ea;
   --primary: #2a78d6; --primary-text: #fff; --alt: #eb6834; --danger: #d33c3b;
