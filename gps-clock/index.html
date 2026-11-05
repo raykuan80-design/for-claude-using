@@ -158,19 +158,19 @@
       <h2>3. 建立捷徑「寫入打卡」（只要做一次）</h2>
       <p>打開「捷徑」App › 右上角 ＋ 新增捷徑，名稱改成「寫入打卡」。依序加入下面的動作（在動作搜尋列輸入引號裡的關鍵字）：</p>
       <ol>
-        <li>搜尋「<b>格式化日期</b>」：日期選「目前日期」，日期格式選「自訂」，填入
+        <li>搜尋「<b>格式化日期</b>」：點藍色的「日期」改選變數「<b>目前日期</b>」（不要在這裡打字），再把「日期格式」改成「<b>自訂</b>」，在下面多出來的格式欄位填入
           <div class="copy"><code>yyyy-MM-dd HH:mm:ss</code><button class="ghost small" data-copy="yyyy-MM-dd HH:mm:ss" type="button">複製</button></div></li>
-        <li>搜尋「<b>文字</b>」：內容是「格式化的日期」變數、一個半形逗號、再接「捷徑輸入」變數，看起來像 <code>[格式化的日期],[捷徑輸入]</code>。</li>
+        <li>搜尋「<b>文字</b>」：內容是「格式化的日期」變數、一個<b>半形逗號 <code>,</code></b>、再接「捷徑輸入」變數，看起來像 <code>[格式化的日期],[捷徑輸入]</code>。逗號不能少。</li>
         <li>搜尋「<b>Base64</b>」：選「編碼」，輸入是上一步的「文字」。點開「顯示更多」，換行選「無」。</li>
-        <li>再加一個「<b>格式化日期</b>」：目前日期、自訂格式
+        <li>再加一個「<b>格式化日期</b>」：一樣選變數「目前日期」、日期格式「自訂」，格式欄位填
           <div class="copy"><code>yyyyMMdd-HHmmss</code><button class="ghost small" data-copy="yyyyMMdd-HHmmss" type="button">複製</button></div></li>
-        <li>搜尋「<b>取得 URL 內容</b>」，網址填下面這串，最後的 <code>[格式化的日期]</code> 換成第 4 步的變數：
+        <li>搜尋「<b>取得 URL 內容</b>」，網址先貼上下面這串（複製按鈕只會複製到 <code>punches/</code>），接著插入第 4 步的「格式化的日期」變數，最後再打 <code>.csv</code>：
           <div class="copy"><code id="shortcutUrl"></code><button class="ghost small" id="copyUrl" type="button">複製</button></div>
           點開「顯示更多」：
           <ul>
             <li>方法：<b>PUT</b></li>
             <li>標頭：新增兩個
-              <div class="copy"><code>Authorization</code> ＝ <code>Bearer 你的Token</code></div>
+              <div class="copy"><code>Authorization</code> ＝ <code>Bearer github_pat_…</code>（Bearer 後面一個空格，再貼上你真正的 Token）</div>
               <div class="copy"><code>Accept</code> ＝ <code>application/vnd.github+json</code><button class="ghost small" data-copy="application/vnd.github+json" type="button">複製</button></div></li>
             <li>請求本文：<b>JSON</b>，新增兩個文字欄位：<code>message</code> ＝ <code>打卡</code>，<code>content</code> ＝ 第 3 步的「Base64 編碼結果」。</li>
           </ul></li>
