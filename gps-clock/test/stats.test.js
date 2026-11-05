@@ -26,6 +26,22 @@ test('月統計', () => {
   assert.equal(s.pay, 1600);
 });
 
+test('不算工時的地點只記錄、不加總', () => {
+  const ev = [...evs,
+    { time: '2026-11-07 19:00:00', type: 'in', place: '家裡' },
+    { time: '2026-11-07 23:00:00', type: 'out', place: '家裡' },
+  ];
+  const s = monthStats(pairSessions(ev, {}, '2026-11-10 00:00:00'), '2026-11',
+    [{ name: '板橋', wage: 200 }, { name: '家裡', wage: 999, noCount: true }]);
+  assert.equal(s.totalSec, 11.5 * 3600);
+  assert.equal(s.days, 2);
+  assert.equal(s.daily[6].total, 0);
+  assert.equal(s.pay, 1600);
+  const home = s.byPlace.find((p) => p.place === '家裡');
+  assert.deepEqual([home.seconds, home.pay, home.noCount], [4 * 3600, null, true]);
+  assert.equal(s.byPlace[s.byPlace.length - 1].place, '家裡');
+});
+
 test('匯出 CSV', () => {
   const csv = sessionsCsv(pairSessions(evs, {}, '2026-11-10 00:00:00'), '2026-11');
   assert.ok(csv.startsWith('\uFEFF日期'));

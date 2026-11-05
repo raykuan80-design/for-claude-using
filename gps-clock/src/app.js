@@ -94,7 +94,7 @@ function renderPunch() {
   else if (prev && names.includes(prev)) sel.value = prev;
 
   $('#punchStatus').innerHTML = working.length
-    ? working.map((s) => `上班中：${esc(s.place)} ${hm(s.start)} 起（${formatDuration(s.seconds)}）`).join('<br>')
+    ? working.map((s) => `${store.getSettings().places.some((p) => p.name === s.place && p.noCount) ? "在" : "上班中："}${esc(s.place)} ${hm(s.start)} 起（${formatDuration(s.seconds)}）`).join('<br>')
     : '目前沒有上班';
 
   const g = state.gps;
@@ -115,7 +115,7 @@ function renderHome(ss) {
 
   $('#byPlace').innerHTML = st.byPlace.length
     ? st.byPlace.map((p) => `<div class="place-row"><span><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)}</span>
-        <span>${formatDuration(p.seconds)}${p.pay !== null ? ` · $${p.pay.toLocaleString()}` : ''}</span></div>`).join('')
+        <span>${formatDuration(p.seconds)}${p.pay !== null ? ` · $${p.pay.toLocaleString()}` : ''}${p.noCount ? '<span class="tag">不算工時</span>' : ''}</span></div>`).join('')
     : '<p class="muted">這個月還沒有工時。</p>';
 
   const max = Math.max(4 * 3600, ...st.daily.map((d) => d.total));
@@ -189,6 +189,7 @@ function renderPlaces() {
       <label class="field">緯度<input name="lat" type="number" step="any" inputmode="decimal" value="${p.lat ?? ''}"></label>
       <label class="field">經度<input name="lng" type="number" step="any" inputmode="decimal" value="${p.lng ?? ''}"></label>
       <label class="field">範圍（公尺）<input name="radius" type="number" min="20" value="${p.radius ?? 150}"></label>
+      <label class="check full"><input type="checkbox" name="noCount"${p.noCount ? ' checked' : ''}> 不算工時（只記錄時間，例如家裡）</label>
       <button class="ghost small" data-here type="button">用目前位置</button>
       <button class="primary" type="submit">儲存</button>
       <button class="ghost small danger" data-rm type="button">刪除地點</button>
@@ -475,6 +476,7 @@ function bind() {
     const place = {
       name: f.pname.value.trim(), wage: num(f.wage.value), color: f.color.value,
       lat: num(f.lat.value), lng: num(f.lng.value), radius: num(f.radius.value) || 150,
+      ...(f.noCount.checked ? { noCount: true } : {}),
     };
     if (!place.name) { toast('請填名稱'); return; }
     const s = store.getSettings();
