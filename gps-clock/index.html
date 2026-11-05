@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a78d6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="打卡工時">
+<title>打卡工時</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<header class="top">
+  <h1>打卡工時</h1>
+  <button id="syncBtn" class="ghost small" type="button">同步</button>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="home" class="active">總覽</button>
+  <button data-tab="detail">明細</button>
+  <button data-tab="events">紀錄</button>
+  <button data-tab="settings">設定</button>
+  <button data-tab="help">說明</button>
+</nav>
+
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- 總覽 -->
+  <section id="tab-home" class="tab">
+    <div class="card punch">
+      <div id="punchStatus" class="punch-status">—</div>
+      <label class="field">地點
+        <select id="punchPlace"></select>
+      </label>
+      <div id="gpsInfo" class="muted small-text"></div>
+      <div class="row">
+        <button id="inBtn" class="primary" type="button">上班打卡</button>
+        <button id="outBtn" class="primary alt" type="button">下班打卡</button>
+      </div>
+      <div id="undoRow" class="undo" hidden>
+        <span id="undoText"></span>
+        <button id="undoBtn" class="ghost small" type="button">復原</button>
+      </div>
+    </div>
+
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="card"><h2>每日工時</h2><div id="chart" class="chart"></div></div>
+    <div class="card"><h2>各地點</h2><div id="byPlace"></div></div>
+  </section>
+
+  <!-- 明細 -->
+  <section id="tab-detail" class="tab" hidden>
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <div class="row between">
+      <label class="check"><input type="checkbox" id="onlyPending"> 只看待補</label>
+      <button id="exportBtn" class="ghost small" type="button">匯出 CSV</button>
+    </div>
+    <table class="sessions">
+      <thead><tr><th>日期</th><th>地點</th><th>上班</th><th>下班</th><th>時數</th><th>狀態</th><th></th></tr></thead>
+      <tbody id="sessionRows"></tbody>
+    </table>
+    <p id="noSessions" class="muted" hidden>這個月沒有資料。</p>
+  </section>
+
+  <!-- 紀錄 -->
+  <section id="tab-events" class="tab" hidden>
+    <div class="card">
+      <h2>手動新增</h2>
+      <form id="addForm" class="grid-form">
+        <label class="field">日期<input type="date" name="date" required></label>
+        <label class="field">時間<input type="time" name="clock" step="1" required></label>
+        <label class="field">類型<select name="kind"><option value="in">上班</option><option value="out">下班</option></select></label>
+        <label class="field">地點<select name="place" class="place-select" required></select></label>
+        <button class="primary" type="submit">新增</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>匯入 CSV</h2>
+      <p class="muted small-text">每行「時間,上班或下班,地點」。重複的不會再算一次。</p>
+      <input type="file" id="importFile" accept=".csv,.txt,text/csv,text/plain">
+      <textarea id="importText" rows="4" placeholder="2026-11-03 13:52:08,上班,板橋分校"></textarea>
+      <button id="importBtn" class="ghost" type="button">匯入貼上的文字</button>
+      <div id="importResult" class="muted small-text"></div>
+    </div>
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <ul id="eventList" class="event-list"></ul>
+    <div id="parseErrors" class="muted small-text"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="tab-settings" class="tab" hidden>
+    <div class="card">
+      <h2>GitHub 連線</h2>
+      <form id="connForm" class="stack">
+        <label class="field">帳號<input name="owner" autocomplete="off" autocapitalize="off" placeholder="raykuan80-design" required></label>
+        <label class="field">私人存放庫<input name="repo" autocomplete="off" autocapitalize="off" placeholder="gps-clock-data" required></label>
+        <label class="field">分支（空白＝預設分支）<input name="branch" autocomplete="off" autocapitalize="off"></label>
+        <label class="field">Token<input name="token" type="password" autocomplete="off" placeholder="github_pat_…" required></label>
+        <p class="muted small-text">Token 只存在這支手機，不會上傳到任何地方。</p>
+        <div class="row">
+          <button class="primary" type="submit">連線並同步</button>
+          <button id="disconnectBtn" class="ghost danger" type="button">登出</button>
+        </div>
+        <div id="connResult" class="small-text"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>地點</h2>
+      <p class="muted small-text">名稱要和捷徑裡寫的完全一樣。設定座標後，網頁打卡會自動選最近的地點。</p>
+      <div id="placeList"></div>
+      <button id="addPlaceBtn" class="ghost" type="button">＋ 新增地點</button>
+    </div>
+
+    <div class="card">
+      <h2>配對規則</h2>
+      <form id="rulesForm" class="stack">
+        <label class="field">GPS 飄移合併（分鐘內又上班算同一段）<input type="number" name="mergeGapMinutes" min="0" max="120" required></label>
+        <label class="field">太短不算（少於幾分鐘）<input type="number" name="minSessionMinutes" min="0" max="120" required></label>
+        <button class="primary" type="submit">儲存規則</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 說明 -->
+  <section id="tab-help" class="tab" hidden>
+    <div class="card prose">
+      <h2>1. 建立 GitHub Token</h2>
+      <ol>
+        <li>打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub › 新增 Fine-grained token</a>。</li>
+        <li>Token name 填「打卡」，Expiration 選最長。</li>
+        <li>Repository access 選「Only select repositories」，只勾你的紀錄存放庫（例如 <code>gps-clock-data</code>）。</li>
+        <li>Permissions › Repository permissions › <b>Contents</b> 選「Read and write」。</li>
+        <li>按「Generate token」，複製 <code>github_pat_</code> 開頭的那串文字。</li>
+        <li>回到「設定」分頁填入帳號、存放庫和 Token，按「連線並同步」。</li>
+      </ol>
+
+      <h2>2. 加入主畫面</h2>
+      <p>用 Safari 開這個網頁，點「分享」›「加入主畫面」。之後從主畫面圖示打開。</p>
+
+      <h2>3. 建立捷徑「寫入打卡」（只要做一次）</h2>
+      <p>打開「捷徑」App › 右上角 ＋ 新增捷徑，名稱改成「寫入打卡」。依序加入下面的動作（在動作搜尋列輸入引號裡的關鍵字）：</p>
+      <ol>
+        <li>搜尋「<b>格式化日期</b>」：點藍色的「日期」改選變數「<b>目前日期</b>」（不要在這裡打字），再把「日期格式」改成「<b>自訂</b>」，在下面多出來的格式欄位填入
+          <div class="copy"><code>yyyy-MM-dd HH:mm:ss</code><button class="ghost small" data-copy="yyyy-MM-dd HH:mm:ss" type="button">複製</button></div></li>
+        <li>搜尋「<b>文字</b>」：內容是「格式化的日期」變數、一個<b>半形逗號 <code>,</code></b>、再接「捷徑輸入」變數，看起來像 <code>[格式化的日期],[捷徑輸入]</code>。逗號不能少。</li>
+        <li>搜尋「<b>Base64</b>」：選「編碼」，輸入是上一步的「文字」。點開「顯示更多」，換行選「無」。</li>
+        <li>再加一個「<b>格式化日期</b>」：一樣選變數「目前日期」、日期格式「自訂」，格式欄位填
+          <div class="copy"><code>yyyyMMdd-HHmmss</code><button class="ghost small" data-copy="yyyyMMdd-HHmmss" type="button">複製</button></div></li>
+        <li>搜尋「<b>取得 URL 內容</b>」，網址先貼上下面這串（複製按鈕只會複製到 <code>punches/</code>），接著插入第 4 步的「格式化的日期」變數，最後再打 <code>.csv</code>：
+          <div class="copy"><code id="shortcutUrl"></code><button class="ghost small" id="copyUrl" type="button">複製</button></div>
+          點開「顯示更多」：
+          <ul>
+            <li>方法：<b>PUT</b></li>
+            <li>標頭：新增兩個
+              <div class="copy"><code>Authorization</code> ＝ <code>Bearer github_pat_…</code>（Bearer 後面一個空格，再貼上你真正的 Token）</div>
+              <div class="copy"><code>Accept</code> ＝ <code>application/vnd.github+json</code><button class="ghost small" data-copy="application/vnd.github+json" type="button">複製</button></div></li>
+            <li>請求本文：<b>JSON</b>，新增兩個文字欄位：<code>message</code> ＝ <code>打卡</code>，<code>content</code> ＝ 第 3 步的「Base64 編碼結果」。</li>
+          </ul></li>
+      </ol>
+      <p>做好後可以先手動執行一次測試：點捷徑會要求輸入，填 <code>上班,測試</code>，然後回網頁按「同步」，應該會看到一筆「測試」的上班紀錄（測完到「紀錄」分頁刪掉）。</p>
+
+      <h2>4. 每個地點建立兩個自動化</h2>
+      <ol>
+        <li>捷徑 App › 自動化 › ＋ › 「抵達」，選地點（例如補習班），勾「立即執行」。</li>
+        <li>動作加「<b>文字</b>」，內容填 <code>上班,地點名稱</code>（例如 <code>上班,板橋分校</code>）。</li>
+        <li>再加「<b>執行捷徑</b>」，選「寫入打卡」，輸入是上一步的「文字」。</li>
+        <li>再建一個「離開」自動化，文字改成 <code>下班,地點名稱</code>。</li>
+      </ol>
+
+      <h2>注意事項</h2>
+      <ul>
+        <li>地點名稱在捷徑和「設定 › 地點」裡必須一字不差。</li>
+        <li>手機要開「定位服務」，捷徑 App 的定位權限選「永遠」。</li>
+        <li>沒網路時自動化會失敗；可以在網頁手動補打卡。網頁上打的卡在沒網路時會先存在手機，下次同步再上傳。</li>
+        <li>紀錄存在你的私人存放庫 <code>punches/</code> 資料夾，每次打卡一個檔案，可以直接在 GitHub 上看。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<dialog id="fixDialog">
+  <form id="fixForm" method="dialog" class="stack">
+    <h2>補打卡</h2>
+    <p id="fixHint" class="muted small-text"></p>
+    <label class="field">地點<input name="place" readonly></label>
+    <label class="field">類型<select name="kind"><option value="in">上班</option><option value="out">下班</option></select></label>
+    <label class="field">日期<input type="date" name="date" required></label>
+    <label class="field">時間<input type="time" name="clock" step="1" required></label>
+    <div class="row">
+      <button class="primary" value="ok" type="submit">補上</button>
+      <button class="ghost" value="cancel" formnovalidate type="submit">取消</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
