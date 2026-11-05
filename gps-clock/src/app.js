@@ -159,7 +159,9 @@ function renderEvents() {
     : '<li class="empty">這個月沒有打卡紀錄。</li>';
   $('#eventList')._list = list;
   const errs = store.parseErrors();
-  $('#parseErrors').innerHTML = errs.length ? '無法辨識的行：<br>' + errs.map((e) => `${esc(e.path)} 第 ${e.line} 行：${esc(e.text)}（${e.error}）`).join('<br>') : '';
+  $('#parseErrors').innerHTML = errs.length ? '<p>無法辨識的檔案（例如測試時送出的空白打卡）：</p><ul class="event-list">' + errs.map((e, i) =>
+    `<li><span>${esc(e.path.replace('punches/', ''))}：${esc(e.text) || '（空白）'}（${e.error}）</span><button class="ghost small danger" data-delfile="${i}" type="button">刪除</button></li>`).join('') + '</ul>' : '';
+  $('#parseErrors')._errs = errs;
 }
 
 function renderSettings() {
@@ -359,6 +361,12 @@ function bind() {
     if (!b) return;
     const ev = $('#eventList')._list[+b.dataset.del];
     twoStep(b, async () => { await store.deleteEvent(ev); toast('已刪除'); render(); });
+  });
+  $('#parseErrors').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delfile]');
+    if (!b) return;
+    const err = $('#parseErrors')._errs[+b.dataset.delfile];
+    twoStep(b, async () => { await store.deleteFile(err.path); toast('已刪除'); render(); });
   });
   const doImport = async (text) => {
     if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }

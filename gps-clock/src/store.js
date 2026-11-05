@@ -166,6 +166,15 @@ export async function deleteEvent(e) {
   persist();
 }
 
+/** 刪除整個檔案（用來清掉無法辨識的測試檔） */
+export async function deleteFile(path) {
+  const f = cache.files[path];
+  if (!f) return;
+  await client().deleteFile(path, f.sha, `刪除無法辨識的檔案 ${path}`);
+  delete cache.files[path];
+  persist();
+}
+
 /** 儲存地點與規則到 GitHub */
 export async function saveSettings(settings) {
   cache.settings = settings; persist();
