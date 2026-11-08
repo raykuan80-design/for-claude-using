@@ -2,11 +2,11 @@
 // - 連線設定（含 Token）只存在這支手機的 localStorage，不會上傳。
 // - 打卡紀錄與地點設定存在 GitHub；本機保留一份快取，離線也能看。
 // - 離線時打的卡先放進待上傳清單，下次同步時補傳。
-import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611080154';
-import { GitHub } from './github.js?v=202611080154';
-import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611080154';
-import { DEFAULT_RULES } from './core/pairing.js?v=202611080154';
-import { taipeiString } from './core/time.js?v=202611080154';
+import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611080420';
+import { GitHub } from './github.js?v=202611080420';
+import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611080420';
+import { DEFAULT_RULES } from './core/pairing.js?v=202611080420';
+import { taipeiString } from './core/time.js?v=202611080420';
 
 const CONN_KEY = 'gps-clock-conn';
 const CACHE_KEY = 'gps-clock-cache';
@@ -84,10 +84,12 @@ export async function sync() {
   cache.files = next;
 
   const sf = files.find((f) => f.path === SETTINGS_PATH);
-  if (sf && sf.sha !== cache.settingsSha) {
+  // 舊版網頁存的快取沒有 schedule 欄位：不管 sha 有沒有變都重新讀一次設定檔
+  const stale = !('schedule' in cache.settings);
+  if (sf && (stale || sf.sha !== cache.settingsSha)) {
     try {
       const s = JSON.parse(await gh.getBlob(sf.sha));
-      cache.settings = { places: s.places || [], rules: { ...DEFAULT_RULES, ...(s.rules || {}) }, schedule: s.schedule || '' };
+      cache.settings = { ...s, places: s.places || [], rules: { ...DEFAULT_RULES, ...(s.rules || {}) }, schedule: s.schedule || '' };
       cache.settingsSha = sf.sha;
     } catch { /* 設定檔壞掉就沿用本機的 */ }
   }
