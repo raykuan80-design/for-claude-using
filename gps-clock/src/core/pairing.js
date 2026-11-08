@@ -1,5 +1,5 @@
 // 工時配對（純函式）。把打卡事件配成工作時段。
-import { toSec, fromSec, dateOf } from './time.js?v=202611080953';
+import { toSec, fromSec, dateOf } from './time.js?v=202611081157';
 
 export const DEFAULT_RULES = { mergeGapMinutes: 10, minSessionMinutes: 5 };
 const MAX_OPEN_SEC = 20 * 3600; // 偶爾會做到 16 小時以上（例如 14:00 到隔天 06:19）
