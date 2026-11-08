@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="src/styles.css?v=202611080420">
+<link rel="stylesheet" href="src/styles.css?v=202611080446">
 </head>
 <body>
 <header class="top">
@@ -141,7 +141,8 @@
             <li><code>每週一 18:00-21:00 名揚 國二理化</code>：每週固定課（星期、時間、地點、課名）</li>
             <li><code>2026-10-19 停課 國二理化</code>：這天停這堂課；只寫 <code>停課</code> 就是整天都停</li>
             <li><code>2026-10-26 13:30-16:30 名揚 國三理化</code>：這天多一堂（補課、加課、調課）</li>
-            <li>地點名稱要和上面「地點」裡的一樣，薪資才算得出來；括號裡的字是備註</li>
+            <li>每堂的錢寫在最後：<code>… 國二理化輔導 $1500</code>；不滿 3 小時要按比例就寫 <code>$3000/3h</code>（2.5 小時的課＝2500）</li>
+            <li>沒寫錢的課，用上面「地點」裡的薪資算；括號裡的字是備註</li>
           </ul>
         </details>
         <button class="primary" type="submit">儲存課表</button>
@@ -231,6 +232,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="src/app.js?v=202611080420"></script>
+<script type="module" src="src/app.js?v=202611080446"></script>
 </body>
 </html>

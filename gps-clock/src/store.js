@@ -2,11 +2,11 @@
 // - 連線設定（含 Token）只存在這支手機的 localStorage，不會上傳。
 // - 打卡紀錄與地點設定存在 GitHub；本機保留一份快取，離線也能看。
 // - 離線時打的卡先放進待上傳清單，下次同步時補傳。
-import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611080420';
-import { GitHub } from './github.js?v=202611080420';
-import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611080420';
-import { DEFAULT_RULES } from './core/pairing.js?v=202611080420';
-import { taipeiString } from './core/time.js?v=202611080420';
+import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611080446';
+import { GitHub } from './github.js?v=202611080446';
+import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611080446';
+import { DEFAULT_RULES } from './core/pairing.js?v=202611080446';
+import { taipeiString } from './core/time.js?v=202611080446';
 
 const CONN_KEY = 'gps-clock-conn';
 const CACHE_KEY = 'gps-clock-cache';

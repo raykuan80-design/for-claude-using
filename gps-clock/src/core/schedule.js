@@ -6,7 +6,7 @@
 //   2026-10-19 停課 國二理化              這天停某堂課（寫課名或地點；只寫「停課」= 當天全停）
 //   2026-10-26 13:30-16:30 名揚 國三理化  這天多一堂課（補課、加課、調課）
 //   # 開頭是註解
-import { toSec, fromSec, isValid, pad } from './time.js?v=202611080420';
+import { toSec, fromSec, isValid, pad } from './time.js?v=202611080446';
 
 const WD = '日一二三四五六';
 const TIME = /^(\d{1,2})[:：](\d{2})\s*[-–－~～到至]\s*(\d{1,2})[:：](\d{2})$/;
@@ -26,6 +26,18 @@ function normRange(s) {
   const a = h1 * 60 + m1, b = h2 * 60 + m2;
   if (b <= a) return null;
   return { from: a, to: b };
+}
+
+/**
+ * 從課名尾端拆出每堂薪資：「國二理化 $3000」→ 3000；「小五小牛頓 $3000/3h」→ 依上課時間按比例（每 3 小時 3000）
+ * @returns {{ course, price: number|null }}（price 已換算成這堂課的錢）
+ */
+function splitPrice(text, minutes) {
+  const m = /\s*[$＄]\s*(\d+(?:\.\d+)?)\s*(?:\/\s*(\d+(?:\.\d+)?)\s*(?:h|hr|小時|時)?)?\s*$/i.exec(text);
+  if (!m) return { course: text.trim(), price: null };
+  const base = +m[1];
+  const price = m[2] ? Math.round(base * minutes / (+m[2] * 60)) : base;
+  return { course: text.slice(0, m.index).trim(), price };
 }
 
 /** 去掉括號備註，例如「國三理化（補10/30）」→「國三理化」 */
@@ -56,7 +68,7 @@ export function parseSchedule(text = '') {
     if (m) {
       const r = normRange(m[2].replace(/\s+/g, ''));
       if (!r) return err('時間要寫成 18:00-21:00');
-      out.weekly.push({ wd: WD.indexOf(m[1] === '天' ? '日' : m[1]), ...r, place: m[3], course: m[4].trim() });
+      out.weekly.push({ wd: WD.indexOf(m[1] === '天' ? '日' : m[1]), ...r, place: m[3], ...splitPrice(m[4], r.to - r.from) });
       return;
     }
 
@@ -77,7 +89,7 @@ export function parseSchedule(text = '') {
     const e = /^(\S+(?:\s*[-–－~～到至]\s*\S+)?)\s+(\S+)\s*(.*)$/.exec(rest);
     const r = e && normRange(e[1].replace(/\s+/g, ''));
     if (!r) return err('日期後面要接「停課」或「時間 地點 課名」');
-    out.extras.push({ date, ...r, place: e[2], course: e[3].trim() });
+    out.extras.push({ date, ...r, place: e[2], ...splitPrice(e[3], r.to - r.from) });
   });
   return out;
 }
@@ -96,11 +108,11 @@ export function classesOn(sched, date) {
       if (w.wd !== wd) continue;
       const name = bare(w.course);
       if (cancel.includes('*') || cancel.some((c) => c === name || c === w.place || c === `${w.place} ${name}`)) continue;
-      list.push({ start: at(date, w.from), end: at(date, w.to), place: w.place, course: w.course, extra: false });
+      list.push({ start: at(date, w.from), end: at(date, w.to), place: w.place, course: w.course, price: w.price, extra: false });
     }
   }
   for (const x of sched.extras) {
-    if (x.date === date) list.push({ start: at(date, x.from), end: at(date, x.to), place: x.place, course: x.course, extra: true });
+    if (x.date === date) list.push({ start: at(date, x.from), end: at(date, x.to), place: x.place, course: x.course, price: x.price, extra: true });
   }
   return list.sort((a, b) => (a.start < b.start ? -1 : 1));
 }
@@ -140,7 +152,7 @@ export function applySchedule(sessions, sched, skipPlaces = new Set()) {
       if (c.b <= from) continue;
       if (from > cur) out.push(piece(cur, from, { split: true }));
       out.push(piece(from, c.b, {
-        place: c.place, course: c.course, classStart: c.start, classEnd: c.end,
+        place: c.place, course: c.course, price: c.price, classStart: c.start, classEnd: c.end,
         status: s.status === 'working' && c.b < b ? 'normal' : s.status,
       }));
       cur = c.b;

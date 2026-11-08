@@ -21,7 +21,7 @@ test('解析課表', () => {
   const s = parseSchedule(TEXT.replace('－', '-'));
   assert.deepEqual(s.errors, []);
   assert.equal(s.weekly.length, 4);
-  assert.deepEqual(s.weekly[0], { wd: 1, from: 18 * 60, to: 21 * 60, place: '名揚', course: '國二理化' });
+  assert.deepEqual(s.weekly[0], { wd: 1, from: 18 * 60, to: 21 * 60, place: '名揚', course: '國二理化', price: null });
   assert.equal(s.extras.length, 1);
   assert.deepEqual(s.cancels.get('2026-10-24'), ['*']);
   assert.equal(s.from, '2026-10-19');
@@ -96,4 +96,26 @@ test('上班中、缺打卡、不算工時的地點', () => {
 test('沒有課表就原樣', () => {
   const ss = pairSessions([{ time: '2026-11-09 17:00:00', type: 'in', place: '鼎盛' }], {}, NOW);
   assert.equal(applySchedule(ss, parseSchedule('')), ss);
+});
+
+test('每堂薪資：固定金額、按比例、同一堂只算一次', () => {
+  const sched = parseSchedule(`每週六 10:00-12:00 高群 國二理化輔導 $1500
+每週六 13:30-16:00 同德 小五小牛頓 $3000/3h
+2026-11-07 09:00-12:00 名揚 國二理化（加課）$3000`);
+  assert.deepEqual(sched.errors, []);
+  assert.equal(sched.weekly[1].course, '小五小牛頓');
+  assert.equal(sched.weekly[1].price, 2500);
+  const ev = [
+    { time: '2026-11-07 09:00:00', type: 'in', place: '鼎盛' },
+    { time: '2026-11-07 14:30:00', type: 'out', place: '鼎盛' },
+    { time: '2026-11-07 15:00:00', type: 'in', place: '鼎盛' },
+    { time: '2026-11-07 16:00:00', type: 'out', place: '鼎盛' },
+    { time: '2026-11-14 10:00:00', type: 'in', place: '鼎盛' },
+    { time: '2026-11-14 12:00:00', type: 'out', place: '鼎盛' },
+  ];
+  const ss = applySchedule(pairSessions(ev, {}, NOW), sched);
+  const st = monthStats(ss, '2026-11', [{ name: '鼎盛', wage: 300 }, { name: '同德', wage: 3000, payUnit: 'class' }]);
+  const by = Object.fromEntries(st.byPlace.map((p) => [p.place, [p.pay, p.classes]]));
+  assert.deepEqual(by, { 名揚: [3000, 1], 同德: [2500, 1], 高群: [1500, 1], 鼎盛: [450, 1] });
+  assert.equal(st.pay, 7450);
 });

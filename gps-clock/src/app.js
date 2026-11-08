@@ -1,11 +1,11 @@
 // 畫面與操作
-import * as store from './store.js?v=202611080420';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611080420';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611080420';
-import { nearestPlace } from './core/geo.js?v=202611080420';
-import { typeLabel } from './core/parse.js?v=202611080420';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611080420';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611080420';
+import * as store from './store.js?v=202611080446';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611080446';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611080446';
+import { nearestPlace } from './core/geo.js?v=202611080446';
+import { typeLabel } from './core/parse.js?v=202611080446';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611080446';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611080446';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -161,7 +161,7 @@ function renderDayTip(ss, st) {
   const list = ss.filter((s) => s.date === date);
   const head = `<div class="tip-head"><b>${+date.slice(5, 7)}/${+date.slice(8)}（${wd}）</b>` +
     (d && d.total ? `<span>共 <b>${formatDuration(d.total)}</b>（${hours(d.total)} 小時）</span>` : '<span class="muted">沒有工時</span>') + '</div>';
-  const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}${s.course ? ` <b>${esc(s.course)}</b>` : ''}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
+  const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}${s.course ? ` <b>${esc(s.course)}</b>${s.price != null ? ` $${s.price.toLocaleString()}` : ''}` : ''}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
     `<span>${counts(s) ? formatDuration(s.seconds) : `<span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>`}</span></div>`).join('');
   const miss = uncoveredClasses(schedule(), date, list).map((c) =>
     `<div class="tip-row miss"><span>${esc(c.place)} ${esc(c.course)}　${hm(c.start)} – ${hm(c.end)}</span><span>沒在打卡時間內</span></div>`).join('');
@@ -176,7 +176,7 @@ function renderDetail(ss) {
   $('#sessionRows').innerHTML = list.map((s) => {
     const idx = ss.indexOf(s);
     const cls = pieces.filter((p) => p.origin === s).map((p) =>
-      `<div class="class-line"><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)} ${esc(p.course)} ${hm(p.start)}–${p.end ? hm(p.end) : '現在'}（${formatDuration(p.seconds)}）</div>`).join('');
+      `<div class="class-line"><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)} ${esc(p.course)}${p.price != null ? ` $${p.price.toLocaleString()}` : ''} ${hm(p.start)}–${p.end ? hm(p.end) : '現在'}（${formatDuration(p.seconds)}）</div>`).join('');
     const fix = isPending(s) ? `<button class="ghost small" data-fix="${idx}" type="button">補打卡</button>` : '';
     return `<tr>
       <td data-k="date">${s.date.slice(5)} <span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}</td>
