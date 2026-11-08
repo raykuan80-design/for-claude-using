@@ -1,5 +1,5 @@
 // 工時配對（純函式）。把打卡事件配成工作時段。
-import { toSec, fromSec, dateOf } from './time.js?v=202611081157';
+import { toSec, fromSec, dateOf } from './time.js?v=202611081552';
 
 export const DEFAULT_RULES = { mergeGapMinutes: 10, minSessionMinutes: 5 };
 const MAX_OPEN_SEC = 20 * 3600; // 偶爾會做到 16 小時以上（例如 14:00 到隔天 06:19）
@@ -86,8 +86,13 @@ export function pairSessions(events, rules = {}, now) {
     }
     if (open) closed.push(open);
 
+    let prev = null;
     for (const s of closed) {
       let status, seconds = 0;
+      // 凌晨（6 點前）中途離開又回來（例如去吃飯），3 小時內接著上班：算在同一天的班
+      let date = dateOf(s.start || s.end);
+      if (s.start && prev && prev.end && +s.start.slice(11, 13) < 6 && date !== prev.date
+        && toSec(s.start) - toSec(prev.end) <= 3 * 3600) date = prev.date;
       if (s.start && s.end) {
         seconds = toSec(s.end) - toSec(s.start);
         status = seconds < minSessionMinutes * 60 ? 'ignored' : 'normal';
@@ -101,7 +106,7 @@ export function pairSessions(events, rules = {}, now) {
 
       result.push({
         place,
-        date: dateOf(s.start || s.end),
+        date,
         start: s.start,
         end: s.end,
         seconds,
@@ -110,6 +115,7 @@ export function pairSessions(events, rules = {}, now) {
         lastOut: status === 'missingOut' ? s.lastOut : null,
         events: s.events,
       });
+      prev = { date, end: s.end };
     }
   }
 
