@@ -1,12 +1,12 @@
 // 課表：打卡時段裡和課表重疊的時間，改算到上課的地點（純函式）。
 //
 // 課表是幾行文字，一行一件事：
-//   期間 2026-10-19 ~ 2026-12-13          每週固定課的有效期間（可省略）
+//   期間 2026-10-19 ~ 2026-12-13          下面的每週固定課的有效期間（可省略；可寫好幾段，各管到下一個「期間」為止）
 //   每週一 18:00-21:00 名揚 國二理化      每週固定課：星期、時間、地點、課名
 //   2026-10-19 停課 國二理化              這天停某堂課（寫課名或地點；只寫「停課」= 當天全停）
 //   2026-10-26 13:30-16:30 名揚 國三理化  這天多一堂課（補課、加課、調課）
 //   # 開頭是註解
-import { toSec, fromSec, isValid, pad } from './time.js?v=202611080446';
+import { toSec, fromSec, isValid, pad } from './time.js?v=202611080810';
 
 const WD = '日一二三四五六';
 const TIME = /^(\d{1,2})[:：](\d{2})\s*[-–－~～到至]\s*(\d{1,2})[:：](\d{2})$/;
@@ -51,6 +51,7 @@ const bare = (s) => s.replace(/[（(][^）)]*[）)]/g, '').trim();
  */
 export function parseSchedule(text = '') {
   const out = { weekly: [], extras: [], cancels: new Map(), from: null, to: null, errors: [] };
+  let period = null;
   String(text).split(/\r?\n/).forEach((raw, i) => {
     const line = raw.replace(/　/g, ' ').trim();
     if (!line || line.startsWith('#')) return;
@@ -60,7 +61,9 @@ export function parseSchedule(text = '') {
     if (m) {
       const a = normDate(m[1]), b = normDate(m[2]);
       if (!a || !b || b < a) return err('期間日期看不懂');
-      out.from = a; out.to = b;
+      period = { from: a, to: b };
+      if (!out.from || a < out.from) out.from = a;
+      if (!out.to || b > out.to) out.to = b;
       return;
     }
 
@@ -68,7 +71,7 @@ export function parseSchedule(text = '') {
     if (m) {
       const r = normRange(m[2].replace(/\s+/g, ''));
       if (!r) return err('時間要寫成 18:00-21:00');
-      out.weekly.push({ wd: WD.indexOf(m[1] === '天' ? '日' : m[1]), ...r, place: m[3], ...splitPrice(m[4], r.to - r.from) });
+      out.weekly.push({ wd: WD.indexOf(m[1] === '天' ? '日' : m[1]), ...r, place: m[3], ...splitPrice(m[4], r.to - r.from), period });
       return;
     }
 
@@ -100,12 +103,12 @@ const weekdayOf = (date) => new Date(date + 'T00:00:00Z').getUTCDay();
 /** 某天課表上的課：[{ start, end, place, course, extra }]，依時間排序 */
 export function classesOn(sched, date) {
   const list = [];
-  const inRange = (!sched.from || date >= sched.from) && (!sched.to || date <= sched.to);
-  if (inRange) {
+  {
     const cancel = sched.cancels.get(date) || [];
     const wd = weekdayOf(date);
     for (const w of sched.weekly) {
       if (w.wd !== wd) continue;
+      if (w.period && (date < w.period.from || date > w.period.to)) continue;
       const name = bare(w.course);
       if (cancel.includes('*') || cancel.some((c) => c === name || c === w.place || c === `${w.place} ${name}`)) continue;
       list.push({ start: at(date, w.from), end: at(date, w.to), place: w.place, course: w.course, price: w.price, extra: false });

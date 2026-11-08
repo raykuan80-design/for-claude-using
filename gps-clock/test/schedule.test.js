@@ -21,7 +21,7 @@ test('解析課表', () => {
   const s = parseSchedule(TEXT.replace('－', '-'));
   assert.deepEqual(s.errors, []);
   assert.equal(s.weekly.length, 4);
-  assert.deepEqual(s.weekly[0], { wd: 1, from: 18 * 60, to: 21 * 60, place: '名揚', course: '國二理化', price: null });
+  assert.deepEqual(s.weekly[0], { wd: 1, from: 18 * 60, to: 21 * 60, place: '名揚', course: '國二理化', price: null, period: { from: '2026-10-19', to: '2026-12-13' } });
   assert.equal(s.extras.length, 1);
   assert.deepEqual(s.cancels.get('2026-10-24'), ['*']);
   assert.equal(s.from, '2026-10-19');
@@ -118,4 +118,15 @@ test('每堂薪資：固定金額、按比例、同一堂只算一次', () => {
   const by = Object.fromEntries(st.byPlace.map((p) => [p.place, [p.pay, p.classes]]));
   assert.deepEqual(by, { 名揚: [3000, 1], 同德: [2500, 1], 高群: [1500, 1], 鼎盛: [450, 1] });
   assert.equal(st.pay, 7450);
+});
+
+test('好幾段期間：每段的每週固定課只在自己的期間內', () => {
+  const s = parseSchedule(`期間 2026-08-31 ~ 2026-10-18
+每週日 18:00-20:30 高群 國一愛輔導
+期間 2026-10-19 ~ 2026-12-13
+每週日 09:30-12:00 同德 小六資優鑑定`);
+  const names = (d) => classesOn(s, d).map((c) => c.course);
+  assert.deepEqual(names('2026-10-18'), ['國一愛輔導']);
+  assert.deepEqual(names('2026-10-25'), ['小六資優鑑定']);
+  assert.deepEqual([s.from, s.to], ['2026-08-31', '2026-12-13']);
 });
