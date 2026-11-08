@@ -1,5 +1,5 @@
 // 工時配對（純函式）。把打卡事件配成工作時段。
-import { toSec, fromSec, dateOf } from './time.js';
+import { toSec, fromSec, dateOf } from './time.js?v=202611080154';
 
 export const DEFAULT_RULES = { mergeGapMinutes: 10, minSessionMinutes: 5 };
 const MAX_OPEN_SEC = 16 * 3600;

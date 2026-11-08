@@ -56,4 +56,5 @@ iPhone「捷徑」在抵達／離開工作地點時，自動把一筆打卡寫�
 ```
 npm test      # 單元測試（Node 20 以上）
 npm run dev   # http://localhost:5173/
+npm run stamp # 推上線前執行：所有檔案引用加版本號，手機才不會混用新舊檔案
 ```

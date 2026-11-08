@@ -6,7 +6,10 @@
   "description": "GPS 打卡工時：打卡紀錄存在私人 GitHub 存放庫",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "dev": "node scripts/serve.mjs"
+    "dev": "node scripts/serve.mjs",
+    "stamp": "node scripts/stamp.mjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
