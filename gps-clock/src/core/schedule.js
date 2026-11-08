@@ -6,7 +6,7 @@
 //   2026-10-19 停課 國二理化              這天停某堂課（寫課名或地點；只寫「停課」= 當天全停）
 //   2026-10-26 13:30-16:30 名揚 國三理化  這天多一堂課（補課、加課、調課）
 //   # 開頭是註解
-import { toSec, fromSec, isValid, pad } from './time.js?v=202611080945';
+import { toSec, fromSec, isValid, pad } from './time.js?v=202611080953';
 
 const WD = '日一二三四五六';
 const TIME = /^(\d{1,2})[:：](\d{2})\s*[-–－~～到至]\s*(\d{1,2})[:：](\d{2})$/;
@@ -128,9 +128,10 @@ const counted = (s) => s.status === 'normal' || s.status === 'working';
  * @param {Array} sessions pairSessions 的結果
  * @param {object} sched parseSchedule 的結果
  * @param {Set<string>} skipPlaces 不套用課表的地點（例如家裡）
+ * @param {string} [now] 有給的話：課表上已經上完、但不在打卡時間內的課（或其中沒打到卡的部分）也直接補上（fromSchedule）
  * @returns {Array} 新的時段陣列；拆出來的片段有 course（上課）或 split（原地點剩下的時間），以及 origin（原時段）
  */
-export function applySchedule(sessions, sched, skipPlaces = new Set()) {
+export function applySchedule(sessions, sched, skipPlaces = new Set(), now) {
   if (!sched || (!sched.weekly.length && !sched.extras.length)) return sessions;
   const out = [];
   for (const s of sessions) {
@@ -162,7 +163,49 @@ export function applySchedule(sessions, sched, skipPlaces = new Set()) {
     }
     if (b > cur) out.push(piece(cur, b, { split: true }));
   }
-  return out;
+  if (now) out.push(...fillClasses(out, sched, now));
+  return out.sort((x, y) => {
+    const kx = x.start || x.end, ky = y.start || y.end;
+    return kx < ky ? -1 : kx > ky ? 1 : 0;
+  });
+}
+
+/** 課表的第一天～最後一天 */
+function scheduleRange(sched) {
+  const dates = [sched.from, sched.to, ...sched.extras.map((x) => x.date)].filter(Boolean).sort();
+  if (!dates.length && sched.weekly.length) return null; // 沒寫期間的每週課：不知道從哪天開始，不自動補
+  return dates.length ? [dates[0], dates[dates.length - 1]] : null;
+}
+
+/** 上課不會不見：已經上完的課，沒被打卡時間蓋到的部分直接補上 */
+function fillClasses(pieces, sched, now) {
+  const range = scheduleRange(sched);
+  if (!range) return [];
+  const last = now.slice(0, 10) < range[1] ? now.slice(0, 10) : range[1];
+  const nowSec = toSec(now);
+  const fills = [];
+  for (let t = toSec(range[0] + ' 00:00:00'); t <= toSec(last + ' 00:00:00'); t += 86400) {
+    const date = fromSec(t).slice(0, 10);
+    for (const c of classesOn(sched, date)) {
+      const cs = toSec(c.start), ce = toSec(c.end);
+      if (ce > nowSec) continue; // 還沒上完
+      const covered = pieces.filter((p) => p.course && p.place === c.place && p.classStart === c.start)
+        .map((p) => [toSec(p.start), toSec(p.start) + p.seconds]).sort((x, y) => x[0] - y[0]);
+      let cur = cs;
+      const add = (from, to) => fills.push({
+        place: c.place, date, start: fromSec(from), end: fromSec(to), seconds: to - from,
+        status: 'normal', manual: false, events: [], fromSchedule: true,
+        course: c.course, price: c.price, classStart: c.start, classEnd: c.end,
+      });
+      for (const [a, b] of covered) {
+        if (a > cur) add(cur, Math.min(a, ce));
+        cur = Math.max(cur, b);
+        if (cur >= ce) break;
+      }
+      if (cur < ce) add(cur, ce);
+    }
+  }
+  return fills;
 }
 
 /** 某天課表上有、但完全不在打卡時間內的課（提醒用） */

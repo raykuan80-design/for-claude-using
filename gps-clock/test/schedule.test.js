@@ -130,3 +130,27 @@ test('好幾段期間：每段的每週固定課只在自己的期間內', () =>
   assert.deepEqual(names('2026-10-25'), ['小六資優鑑定']);
   assert.deepEqual([s.from, s.to], ['2026-08-31', '2026-12-13']);
 });
+
+test('上課不會不見：沒打到卡的課照課表補上（只補已經上完的）', () => {
+  const sched = parseSchedule(TEXT);
+  const ev = [
+    { time: '2026-11-07 09:30:00', type: 'in', place: '鼎盛' },
+    { time: '2026-11-07 15:00:00', type: 'out', place: '鼎盛' },
+  ];
+  const ss = applySchedule(pairSessions(ev, {}, NOW), sched, new Set(), '2026-11-09 19:00:00');
+  const d7 = ss.filter((s) => s.date === '2026-11-07').map((s) => [s.place, s.start.slice(11, 16), s.end.slice(11, 16), !!s.fromSchedule]);
+  assert.deepEqual(d7, [
+    ['名揚', '09:00', '09:30', true],
+    ['名揚', '09:30', '12:00', false],
+    ['鼎盛', '12:00', '13:30', false],
+    ['同德', '13:30', '15:00', false],
+    ['同德', '15:00', '16:00', true],
+  ]);
+  // 11/9 週一 18:00-21:00 還沒上完 → 不補；11/2 週一（11/6 週五）已上完 → 補
+  assert.ok(!ss.some((s) => s.date === '2026-11-09'));
+  assert.ok(ss.some((s) => s.date === '2026-11-02' && s.fromSchedule && s.place === '名揚'));
+  assert.ok(!ss.some((s) => s.date === '2026-10-24'));
+  const st = monthStats(ss, '2026-11', [{ name: '名揚', wage: 3000, payUnit: 'class' }]);
+  const my = st.byPlace.find((p) => p.place === '名揚');
+  assert.equal(my.classes, 3); // 11/2、11/6、11/7 加課（拆兩段只算一堂）
+});

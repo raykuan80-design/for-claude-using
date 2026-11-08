@@ -1,6 +1,6 @@
 // 月統計、薪資、匯出 CSV
-import { daysInMonth, hours, hm } from './time.js?v=202611080945';
-import { counts, isPending, STATUS_LABEL } from './pairing.js?v=202611080945';
+import { daysInMonth, hours, hm } from './time.js?v=202611080953';
+import { counts, isPending, STATUS_LABEL } from './pairing.js?v=202611080953';
 
 /**
  * @returns { totalSec, days, avgSec, pending, byPlace:[{place,seconds,classes,wage,perClass,pay}], daily:[{date, byPlace:{place:sec}, total}], pay, classSec }
@@ -33,6 +33,9 @@ export function monthStats(sessions, month, places = []) {
       pp.seconds += s.seconds;
       if (!paidClass.has(k)) { paidClass.add(k); pp.pay += s.price; pp.count++; }
       placePriced.set(s.place, pp);
+    } else if (s.classStart) {
+      const k = `${s.place}|${s.classStart}`;
+      if (!paidClass.has(k)) { paidClass.add(k); placeCnt.set(s.place, (placeCnt.get(s.place) || 0) + 1); }
     } else placeCnt.set(s.place, (placeCnt.get(s.place) || 0) + 1);
     totalSec += s.seconds;
     if (s.course) classSec += s.seconds;
