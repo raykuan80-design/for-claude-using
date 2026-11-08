@@ -50,7 +50,7 @@ test('規則可調整', () => {
   assert.equal(r.length, 1);
 });
 
-test('超過 16 小時沒下班 → 缺下班，下一筆上班另開一段', () => {
+test('超過 20 小時沒下班 → 缺下班，下一筆上班另開一段', () => {
   const r = pairSessions([at('2026-11-05', '09:00:00', 'in'), at('2026-11-06', '09:00:00', 'in'), at('2026-11-06', '17:00:00', 'out')], {}, NOW);
   assert.equal(r.length, 2);
   assert.equal(r[0].status, 'missingOut');
@@ -58,17 +58,17 @@ test('超過 16 小時沒下班 → 缺下班，下一筆上班另開一段', ()
   assert.equal(r[1].seconds, 8 * 3600);
 });
 
-test('超過 16 小時才下班 → 缺下班＋缺上班', () => {
+test('超過 20 小時才下班 → 缺下班＋缺上班', () => {
   const r = pairSessions([at('2026-11-05', '09:00:00', 'in'), at('2026-11-06', '09:00:00', 'out')], {}, NOW);
   assert.deepEqual(r.map((s) => s.status), ['missingOut', 'missingIn']);
   assert.equal(r[1].date, '2026-11-06');
 });
 
-test('上班中：最後一筆是上班且不到 16 小時', () => {
+test('上班中：最後一筆是上班且不到 20 小時', () => {
   const [s] = pairSessions([ev('10:00:00', 'in')], {}, '2026-11-05 12:30:00');
   assert.equal(s.status, 'working');
   assert.equal(s.seconds, 2.5 * 3600);
-  const [t] = pairSessions([ev('10:00:00', 'in')], {}, '2026-11-06 03:00:00');
+  const [t] = pairSessions([ev('10:00:00', 'in')], {}, '2026-11-06 07:00:00');
   assert.equal(t.status, 'missingOut');
 });
 
