@@ -2,6 +2,7 @@
 // - 連線設定（含 Token）只存在這支手機的 localStorage，不會上傳。
 // - 打卡紀錄與地點設定存在 GitHub；本機保留一份快取，離線也能看。
 // - 離線時打的卡先放進待上傳清單，下次同步時補傳。
+import { parseSchedule, schedulePlaces } from './core/schedule.js';
 import { GitHub } from './github.js';
 import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js';
 import { DEFAULT_RULES } from './core/pairing.js';
@@ -19,7 +20,7 @@ const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 export const getConn = () => load(CONN_KEY, null);
 export const setConn = (c) => (c ? save(CONN_KEY, c) : localStorage.removeItem(CONN_KEY));
 
-const emptyCache = () => ({ files: {}, settings: { places: [], rules: { ...DEFAULT_RULES } }, settingsSha: null, syncedAt: null });
+const emptyCache = () => ({ files: {}, settings: { places: [], rules: { ...DEFAULT_RULES }, schedule: '' }, settingsSha: null, syncedAt: null });
 let cache = load(CACHE_KEY, emptyCache());
 let outbox = load(OUTBOX_KEY, []);
 const persist = () => { save(CACHE_KEY, cache); save(OUTBOX_KEY, outbox); };
@@ -86,7 +87,7 @@ export async function sync() {
   if (sf && sf.sha !== cache.settingsSha) {
     try {
       const s = JSON.parse(await gh.getBlob(sf.sha));
-      cache.settings = { places: s.places || [], rules: { ...DEFAULT_RULES, ...(s.rules || {}) } };
+      cache.settings = { places: s.places || [], rules: { ...DEFAULT_RULES, ...(s.rules || {}) }, schedule: s.schedule || '' };
       cache.settingsSha = sf.sha;
     } catch { /* 設定檔壞掉就沿用本機的 */ }
   }
@@ -199,6 +200,7 @@ export function colorOf(place) {
   // 沒設定顏色：依地點順序（設定裡的地點在前，紀錄裡新出現的在後）固定分配
   const names = places.map((x) => x.name);
   for (const e of allEvents()) if (!names.includes(e.place)) names.push(e.place);
+  for (const n of schedulePlaces(parseSchedule(cache.settings.schedule || ''))) if (!names.includes(n)) names.push(n);
   const i = names.indexOf(place);
   return i < 0 ? '#898781' : PALETTE[i % PALETTE.length];
 }

@@ -46,7 +46,7 @@ test('匯出 CSV', () => {
   const csv = sessionsCsv(pairSessions(evs, {}, '2026-11-10 00:00:00'), '2026-11');
   assert.ok(csv.startsWith('\uFEFF日期'));
   const lines = csv.slice(1).trim().split('\r\n');
-  assert.equal(lines[1], '2026-11-03,板橋,13:00,21:00,8.00,正常,');
+  assert.equal(lines[1], '2026-11-03,板橋,,13:00,21:00,8.00,正常,');
   assert.equal(lines.length, 5);
 });
 

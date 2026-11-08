@@ -4,6 +4,7 @@ import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js
 import { monthStats, sessionsCsv } from './core/stats.js';
 import { nearestPlace } from './core/geo.js';
 import { typeLabel } from './core/parse.js';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js';
 import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -36,6 +37,19 @@ function placeNames() {
 
 function sessions() {
   return pairSessions(store.allEvents(), store.getSettings().rules, nowString());
+}
+
+/** 課表（依文字快取解析結果） */
+function schedule() {
+  const text = store.getSettings().schedule || '';
+  if (schedule.text !== text) { schedule.text = text; schedule.val = parseSchedule(text); }
+  return schedule.val;
+}
+
+/** 依課表拆開後的時段：上課時間改算到上課地點 */
+function allocate(ss) {
+  const skip = new Set(store.getSettings().places.filter((p) => p.noCount).map((p) => p.name));
+  return applySchedule(ss, schedule(), skip);
 }
 
 /** 兩段式刪除：第一次點變成「確定刪除？」，4 秒內再點一次才執行 */
@@ -103,7 +117,8 @@ function renderPunch() {
     : `📍 離最近的 ${g.place.name} 約 ${g.distance >= 1000 ? (g.distance / 1000).toFixed(1) + ' 公里' : Math.round(g.distance) + ' 公尺'}`;
 }
 
-function renderHome(ss) {
+function renderHome(raw) {
+  const ss = allocate(raw);
   const st = monthStats(ss, state.month, store.getSettings().places);
   const kpi = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   $('#kpis').innerHTML =
@@ -111,11 +126,12 @@ function renderHome(ss) {
     kpi(st.days, '上班天數') +
     kpi(formatDuration(st.avgSec), '平均每日') +
     kpi(`<span class="${st.pending ? 'danger' : ''}">${st.pending}</span>`, '待補打卡') +
+    (st.classSec ? kpi(formatDuration(st.classSec), '其中上課') : '') +
     (st.pay !== null ? kpi('$' + st.pay.toLocaleString(), '預估薪資') : '');
 
   $('#byPlace').innerHTML = st.byPlace.length
     ? st.byPlace.map((p) => `<div class="place-row"><span><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)}</span>
-        <span>${formatDuration(p.seconds)}${p.pay !== null ? ` · $${p.pay.toLocaleString()}` : ''}${p.noCount ? '<span class="tag">不算工時</span>' : ''}</span></div>`).join('')
+        <span>${formatDuration(p.seconds)}${p.perClass ? `（${p.classes} 堂）` : ''}${p.pay !== null ? ` · $${p.pay.toLocaleString()}` : ''}${p.noCount ? '<span class="tag">不算工時</span>' : ''}</span></div>`).join('')
     : '<p class="muted">這個月還沒有工時。</p>';
 
   const max = Math.max(4 * 3600, ...st.daily.map((d) => d.total));
@@ -145,22 +161,27 @@ function renderDayTip(ss, st) {
   const list = ss.filter((s) => s.date === date);
   const head = `<div class="tip-head"><b>${+date.slice(5, 7)}/${+date.slice(8)}（${wd}）</b>` +
     (d && d.total ? `<span>共 <b>${formatDuration(d.total)}</b>（${hours(d.total)} 小時）</span>` : '<span class="muted">沒有工時</span>') + '</div>';
-  const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
+  const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}${s.course ? ` <b>${esc(s.course)}</b>` : ''}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
     `<span>${counts(s) ? formatDuration(s.seconds) : `<span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>`}</span></div>`).join('');
-  tip.innerHTML = head + rows;
+  const miss = uncoveredClasses(schedule(), date, list).map((c) =>
+    `<div class="tip-row miss"><span>${esc(c.place)} ${esc(c.course)}　${hm(c.start)} – ${hm(c.end)}</span><span>沒在打卡時間內</span></div>`).join('');
+  tip.innerHTML = head + rows + miss;
 }
 
 function renderDetail(ss) {
   const only = $('#onlyPending').checked;
   const list = ss.filter((s) => s.date.startsWith(state.month) && (!only || isPending(s)));
   $('#noSessions').hidden = list.length > 0;
+  const pieces = allocate(ss).filter((p) => p.course);
   $('#sessionRows').innerHTML = list.map((s) => {
     const idx = ss.indexOf(s);
+    const cls = pieces.filter((p) => p.origin === s).map((p) =>
+      `<div class="class-line"><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)} ${esc(p.course)} ${hm(p.start)}–${p.end ? hm(p.end) : '現在'}（${formatDuration(p.seconds)}）</div>`).join('');
     const fix = isPending(s) ? `<button class="ghost small" data-fix="${idx}" type="button">補打卡</button>` : '';
     return `<tr>
       <td data-k="date">${s.date.slice(5)} <span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}</td>
       <td data-k="status"><span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>${s.manual ? '<span class="tag">手動</span>' : ''}</td>
-      <td data-k="time">${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : '--:--'}${s.end && s.start && dateOf(s.end) !== s.date ? '（隔天）' : ''}</td>
+      <td data-k="time">${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : '--:--'}${s.end && s.start && dateOf(s.end) !== s.date ? '（隔天）' : ''}${cls ? `<div class="classes">上課：${cls}</div>` : ''}</td>
       <td data-k="hours">${counts(s) ? formatDuration(s.seconds) : ''}</td>
       <td data-k="fix">${fix}</td></tr>`;
   }).join('');
@@ -193,6 +214,9 @@ function renderSettings() {
   if (c && !$('#connForm').contains(document.activeElement)) {
     f.owner.value = c.owner; f.repo.value = c.repo; f.branch.value = c.branch || ''; f.token.value = c.token;
   }
+  const sf = $('#scheduleForm');
+  if (!sf.contains(document.activeElement)) sf.elements.schedule.value = store.getSettings().schedule || '';
+  renderScheduleInfo();
   const r = store.getSettings().rules;
   const rf = $('#rulesForm').elements;
   if (!$('#rulesForm').contains(document.activeElement)) {
@@ -207,7 +231,8 @@ function renderPlaces() {
   const all = [...configured, ...extra];
   $('#placeList').innerHTML = all.length ? all.map((p, i) => `<form class="place-edit" data-i="${i}">
       <label class="field full">名稱${p.unsaved ? '（紀錄裡出現，還沒儲存）' : ''}<input name="pname" value="${esc(p.name)}" required></label>
-      <label class="field">時薪（選填）<input name="wage" type="number" min="0" inputmode="numeric" value="${p.wage ?? ''}"></label>
+      <label class="field">薪資（選填）<input name="wage" type="number" min="0" inputmode="numeric" value="${p.wage ?? ''}"></label>
+      <label class="field">薪資算法<select name="payUnit"><option value="hour">每小時</option><option value="class"${p.payUnit === 'class' ? ' selected' : ''}>每堂課</option></select></label>
       <label class="field">顏色<input name="color" type="color" value="${p.color || store.PALETTE[i % store.PALETTE.length]}"></label>
       <label class="field">緯度<input name="lat" type="number" step="any" inputmode="decimal" value="${p.lat ?? ''}"></label>
       <label class="field">經度<input name="lng" type="number" step="any" inputmode="decimal" value="${p.lng ?? ''}"></label>
@@ -218,6 +243,16 @@ function renderPlaces() {
       <button class="ghost small danger" data-rm type="button">刪除地點</button>
     </form>`).join('') : '<p class="muted">還沒有地點。</p>';
   $('#placeList')._all = all;
+}
+
+function renderScheduleInfo(text) {
+  const sch = text === undefined ? schedule() : parseSchedule(text);
+  const n = sch.weekly.length + sch.extras.length;
+  const today = classesOn(sch, state.today);
+  $('#scheduleInfo').innerHTML = !n && !sch.errors.length ? '<span class="muted">還沒有課表。</span>'
+    : `每週固定 ${sch.weekly.length} 堂${sch.extras.length ? `、另外補／加課 ${sch.extras.length} 堂` : ''}${sch.cancels.size ? `、停課 ${sch.cancels.size} 天` : ''}${sch.from ? `（${sch.from.slice(5)} ～ ${sch.to.slice(5)}）` : ''}。` +
+      `今天：${today.length ? today.map((c) => `${esc(c.place)} ${esc(c.course)} ${hm(c.start)}–${hm(c.end)}`).join('、') : '沒有課'}` +
+      (sch.errors.length ? `<ul class="errs">${sch.errors.map((e) => `<li>第 ${e.line} 行「${esc(e.text)}」：${e.error}</li>`).join('')}</ul>` : '');
 }
 
 function renderHelp() {
@@ -326,7 +361,7 @@ function bind() {
     if (!bar || bar.dataset.date === state.selDay) return;
     state.selDay = bar.dataset.date;
     $$('#chart .bar').forEach((b) => b.classList.toggle('sel', b === bar));
-    const ss = sessions();
+    const ss = allocate(sessions());
     renderDayTip(ss, monthStats(ss, state.month, store.getSettings().places));
   };
   $('#chart').addEventListener('click', (e) => pickDay(e.target.closest('.bar')));
@@ -334,7 +369,7 @@ function bind() {
 
   $('#onlyPending').addEventListener('change', () => renderDetail(sessions()));
   $('#exportBtn').addEventListener('click', () => {
-    const blob = new Blob([sessionsCsv(sessions(), state.month)], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([sessionsCsv(allocate(sessions()), state.month)], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `工時明細-${state.month}.csv`;
@@ -440,6 +475,18 @@ function bind() {
     render();
   }));
 
+  $('#scheduleForm').elements.schedule.addEventListener('input', (e) => renderScheduleInfo(e.target.value));
+  $('#scheduleForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = e.target.elements.schedule.value.replace(/\s+$/, '');
+    const bad = parseSchedule(text).errors.length;
+    try {
+      await store.saveSettings({ ...store.getSettings(), schedule: text });
+      toast(bad ? `已儲存，但有 ${bad} 行看不懂，那幾行不會套用` : '課表已儲存');
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    document.activeElement.blur(); render();
+  });
+
   $('#rulesForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target.elements;
@@ -503,6 +550,7 @@ function bind() {
     const place = {
       name: f.pname.value.trim(), wage: num(f.wage.value), color: f.color.value,
       lat: num(f.lat.value), lng: num(f.lng.value), radius: num(f.radius.value) || 150,
+      ...(f.payUnit.value === 'class' ? { payUnit: 'class' } : {}),
       ...(f.noCount.checked ? { noCount: true } : {}),
     };
     if (!place.name) { toast('請填名稱'); return; }

@@ -113,3 +113,9 @@ code { background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
 dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); width: min(420px, 92vw); }
 dialog::backdrop { background: rgba(0,0,0,.4); }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom)); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 20; max-width: 90vw; }
+
+.classes { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.class-line { white-space: nowrap; }
+.tip-row.miss { opacity: .6; font-size: 12px; }
+#scheduleForm textarea { font: 13px/1.5 ui-monospace, Menlo, monospace; box-sizing: border-box; }
+#scheduleInfo .errs { color: var(--danger, #e5484d); margin: 6px 0 0; padding-left: 18px; }

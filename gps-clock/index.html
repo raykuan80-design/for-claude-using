@@ -130,6 +130,25 @@
     </div>
 
     <div class="card">
+      <h2>課表</h2>
+      <p class="muted small-text">打卡時間裡和課表重疊的部分，會改算到上課的地點（薪資照那個地點的設定）。課表外的時間留在原本打卡的地點。</p>
+      <form id="scheduleForm" class="stack">
+        <textarea name="schedule" rows="12" spellcheck="false" placeholder="期間 2026-10-19 ~ 2026-12-13&#10;每週一 18:00-21:00 名揚 國二理化&#10;2026-10-19 停課 國二理化&#10;2026-10-26 13:30-16:30 名揚 國三理化（補課）"></textarea>
+        <div id="scheduleInfo" class="small-text"></div>
+        <details class="small-text"><summary>怎麼寫</summary>
+          <ul>
+            <li><code>期間 2026-10-19 ~ 2026-12-13</code>：每週固定課的有效期間</li>
+            <li><code>每週一 18:00-21:00 名揚 國二理化</code>：每週固定課（星期、時間、地點、課名）</li>
+            <li><code>2026-10-19 停課 國二理化</code>：這天停這堂課；只寫 <code>停課</code> 就是整天都停</li>
+            <li><code>2026-10-26 13:30-16:30 名揚 國三理化</code>：這天多一堂（補課、加課、調課）</li>
+            <li>地點名稱要和上面「地點」裡的一樣，薪資才算得出來；括號裡的字是備註</li>
+          </ul>
+        </details>
+        <button class="primary" type="submit">儲存課表</button>
+      </form>
+    </div>
+
+    <div class="card">
       <h2>配對規則</h2>
       <form id="rulesForm" class="stack">
         <label class="field">GPS 飄移合併（分鐘內又上班算同一段）<input type="number" name="mergeGapMinutes" min="0" max="120" required></label>

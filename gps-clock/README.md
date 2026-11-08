@@ -32,6 +32,12 @@ iPhone「捷徑」在抵達／離開工作地點時，自動把一筆打卡寫�
 
 狀態：正常、上班中、缺下班、缺上班、已忽略。
 
+## 課表（`src/core/schedule.js`）
+
+設定檔的 `schedule` 是幾行文字：`期間 …`、`每週一 18:00-21:00 地點 課名`、`日期 停課 [課名或地點]`、`日期 時間 地點 課名`（補課／加課）。
+算工時前，每段打卡時段裡和課表重疊的時間會切出來，改算到上課地點（帶 `course`），其餘留在原地點。
+只算打卡時間內的部分；沒打卡的課不算，只在當天明細裡提示。地點的 `payUnit: "class"` 表示薪資按堂算（每段一堂）。
+
 ## 檔案
 
 | 路徑 | 內容 |
@@ -40,7 +46,7 @@ iPhone「捷徑」在抵達／離開工作地點時，自動把一筆打卡寫�
 | `src/app.js` | 畫面與操作 |
 | `src/store.js` | 本機快取、離線待上傳、和 GitHub 同步 |
 | `src/github.js` | GitHub REST API |
-| `src/core/` | 純函式：`time`、`parse`、`pairing`、`stats`、`geo`（測試都在這層） |
+| `src/core/` | 純函式：`time`、`parse`、`pairing`、`stats`、`geo`、`schedule`（測試都在這層） |
 | `test/` | 單元測試 |
 | `scripts/serve.mjs` | 本機伺服器 |
 | `scripts/make-icons.mjs` | 用 Playwright 產生 PNG 圖示 |
