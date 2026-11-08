@@ -119,12 +119,35 @@ function renderHome(ss) {
     : '<p class="muted">這個月還沒有工時。</p>';
 
   const max = Math.max(4 * 3600, ...st.daily.map((d) => d.total));
+  // 預設選取：選過的那天（同月份）→ 今天（有工時）→ 本月最後一個有工時的日子
+  const worked = st.daily.filter((d) => d.total > 0);
+  if (!state.selDay || !state.selDay.startsWith(state.month)) {
+    state.selDay = worked.some((d) => d.date === state.today) ? state.today
+      : worked.length ? worked[worked.length - 1].date : null;
+  }
   $('#chart').innerHTML = `<div class="bars-wrap"><div class="bars">${st.daily.map((d) => {
     const segs = Object.entries(d.byPlace).map(([p, sec]) =>
       `<div class="seg" style="height:${(sec / max) * 100}%;background:${store.colorOf(p)}"></div>`).join('');
-    const tip = d.total ? `${d.date.slice(5)}：` + Object.entries(d.byPlace).map(([p, s]) => `${p} ${formatDuration(s)}`).join('、') : `${d.date.slice(5)}：沒有工時`;
-    return `<div class="bar${d.date === state.today ? ' today' : ''}" data-tip="${esc(tip)}">${segs}<span class="day">${+d.date.slice(8)}</span></div>`;
-  }).join('')}</div></div><div class="tip" id="chartTip">點長條看當天工時</div>`;
+    const val = d.total ? `<span class="val">${Math.round(d.total / 360) / 10}</span>` : '';
+    const cls = ['bar', d.date === state.today && 'today', d.date === state.selDay && 'sel'].filter(Boolean).join(' ');
+    return `<div class="${cls}" data-date="${d.date}">${segs}${val}<span class="day">${+d.date.slice(8)}</span></div>`;
+  }).join('')}</div></div><div class="tip" id="chartTip"></div>`;
+  renderDayTip(ss, st);
+}
+
+const WEEK = '日一二三四五六';
+function renderDayTip(ss, st) {
+  const tip = $('#chartTip');
+  const date = state.selDay;
+  if (!date) { tip.innerHTML = '<span class="muted">點長條看當天上了幾小時</span>'; return; }
+  const d = st.daily.find((x) => x.date === date);
+  const wd = WEEK[new Date(date + 'T00:00:00Z').getUTCDay()];
+  const list = ss.filter((s) => s.date === date);
+  const head = `<div class="tip-head"><b>${+date.slice(5, 7)}/${+date.slice(8)}（${wd}）</b>` +
+    (d && d.total ? `<span>共 <b>${formatDuration(d.total)}</b>（${hours(d.total)} 小時）</span>` : '<span class="muted">沒有工時</span>') + '</div>';
+  const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
+    `<span>${counts(s) ? formatDuration(s.seconds) : `<span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>`}</span></div>`).join('');
+  tip.innerHTML = head + rows;
 }
 
 function renderDetail(ss) {
@@ -298,12 +321,16 @@ function bind() {
   $('#outBtn').addEventListener('click', () => punch('out'));
   $('#undoBtn').addEventListener('click', undo);
 
-  $('#chart').addEventListener('pointerover', showTip);
-  $('#chart').addEventListener('click', showTip);
-  function showTip(e) {
-    const bar = e.target.closest('.bar');
-    if (bar) $('#chartTip').textContent = bar.dataset.tip;
-  }
+  // 手機上只在「點」的時候切換（滑動圖表時不要亂跳）；電腦滑鼠移過去就顯示
+  const pickDay = (bar) => {
+    if (!bar || bar.dataset.date === state.selDay) return;
+    state.selDay = bar.dataset.date;
+    $$('#chart .bar').forEach((b) => b.classList.toggle('sel', b === bar));
+    const ss = sessions();
+    renderDayTip(ss, monthStats(ss, state.month, store.getSettings().places));
+  };
+  $('#chart').addEventListener('click', (e) => pickDay(e.target.closest('.bar')));
+  $('#chart').addEventListener('pointerover', (e) => { if (e.pointerType === 'mouse') pickDay(e.target.closest('.bar')); });
 
   $('#onlyPending').addEventListener('change', () => renderDetail(sessions()));
   $('#exportBtn').addEventListener('click', () => {
