@@ -1,11 +1,11 @@
 // 畫面與操作
-import * as store from './store.js?v=202611081552';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611081552';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611081552';
-import { nearestPlace } from './core/geo.js?v=202611081552';
-import { typeLabel } from './core/parse.js?v=202611081552';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611081552';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611081552';
+import * as store from './store.js?v=202611091423';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611091423';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611091423';
+import { nearestPlace } from './core/geo.js?v=202611091423';
+import { typeLabel } from './core/parse.js?v=202611091423';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611091423';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611091423';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -120,14 +120,24 @@ function renderPunch() {
 function renderHome(raw) {
   const ss = allocate(raw);
   const st = monthStats(ss, state.month, store.getSettings().places);
-  const kpi = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const kpi = (v, l, act) => `<div class="kpi${act ? ' clickable' : ''}"${act ? ` data-act="${act}" role="button"` : ''}><div class="v">${v}</div><div class="l">${l}${act ? ' ›' : ''}</div></div>`;
   $('#kpis').innerHTML =
     kpi(formatDuration(st.totalSec), '本月工時') +
     kpi(st.days, '上班天數') +
     kpi(formatDuration(st.avgSec), '平均每日') +
-    kpi(`<span class="${st.pending ? 'danger' : ''}">${st.pending}</span>`, '待補打卡') +
+    kpi(`<span class="${st.pending ? 'danger' : ''}">${st.pending}</span>`, '待補打卡', st.pending ? 'pending' : '') +
     (st.classSec ? kpi(formatDuration(st.classSec), '其中上課') : '') +
     (st.pay !== null ? kpi('$' + st.pay.toLocaleString(), '預估薪資') : '');
+
+  const pend = raw.filter((s) => s.date.startsWith(state.month) && isPending(s));
+  if (!pend.length) state.showPending = false;
+  $('#pendingList').hidden = !state.showPending;
+  $('#pendingList').innerHTML = pend.map((s) => {
+    const wd = WEEK[new Date(s.date + 'T00:00:00Z').getUTCDay()];
+    return `<div class="tip-row"><button class="link" data-day="${s.date}" type="button">${+s.date.slice(5, 7)}/${+s.date.slice(8)}（${wd}）</button>` +
+      `<span>${esc(s.place)}　${s.status === 'missingOut' ? `${hm(s.start)} 上班` : `${hm(s.end)} 下班`}</span>` +
+      `<button class="ghost small" data-fixkey="${fixKey(s)}" type="button">補${s.status === 'missingOut' ? '下班' : '上班'}</button></div>`;
+  }).join('');
 
   $('#byPlace').innerHTML = st.byPlace.length
     ? st.byPlace.map((p) => `<div class="place-row"><span><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)}</span>
@@ -158,6 +168,8 @@ function renderHome(raw) {
 }
 
 const WEEK = '日一二三四五六';
+/** 時段的識別字串（重算後仍對得上） */
+const fixKey = (s) => `${s.place}|${s.start || ''}|${s.end || ''}`;
 function renderDayTip(ss, st) {
   const tip = $('#chartTip');
   const date = state.selDay;
@@ -168,7 +180,9 @@ function renderDayTip(ss, st) {
   const head = `<div class="tip-head"><b>${+date.slice(5, 7)}/${+date.slice(8)}（${wd}）</b>` +
     (d && d.total ? `<span>共 <b>${formatDuration(d.total)}</b>（${hours(d.total)} 小時）</span>` : '<span class="muted">沒有工時</span>') + '</div>';
   const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}${s.course ? ` <b>${esc(s.course)}</b>${s.price != null ? ` $${s.price.toLocaleString()}` : ''}${s.fromSchedule ? '<span class="tag">照課表</span>' : ''}` : ''}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
-    `<span>${counts(s) ? formatDuration(s.seconds) : `<span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>`}</span></div>`).join('');
+    `<span>${counts(s) ? formatDuration(s.seconds) : isPending(s)
+      ? `<button class="ghost small danger" data-fixkey="${fixKey(s)}" type="button">${STATUS_LABEL[s.status]}・補打卡</button>`
+      : `<span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>`}</span></div>`).join('');
   const miss = uncoveredClasses(schedule(), date, list).map((c) =>
     `<div class="tip-row miss"><span>${esc(c.place)} ${esc(c.course)}　${hm(c.start)} – ${hm(c.end)}</span><span>沒在打卡時間內</span></div>`).join('');
   tip.innerHTML = head + rows + miss;
@@ -396,8 +410,22 @@ function bind() {
   // 補打卡
   $('#sessionRows').addEventListener('click', (e) => {
     const b = e.target.closest('[data-fix]');
-    if (!b) return;
-    const s = sessions()[+b.dataset.fix];
+    if (b) openFix(sessions()[+b.dataset.fix]);
+  });
+  // 總覽：點「待補打卡」展開清單；清單和長條圖說明裡的按鈕可以直接補
+  $('#tab-home').addEventListener('click', (e) => {
+    const k = e.target.closest('[data-act="pending"]');
+    if (k) { state.showPending = !state.showPending; $('#pendingList').hidden = !state.showPending; return; }
+    const day = e.target.closest('[data-day]');
+    if (day) {
+      state.selDay = day.dataset.day; state.chartScroll = null; render();
+      $('#chart').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const fb = e.target.closest('[data-fixkey]');
+    if (fb) openFix(sessions().find((s) => fixKey(s) === fb.dataset.fixkey));
+  });
+  function openFix(s) {
     if (!s) return;
     const f = $('#fixForm').elements;
     const kind = s.status === 'missingIn' ? 'in' : 'out';
@@ -409,7 +437,7 @@ function bind() {
       ? `上班 ${hm(s.start)}，缺下班。${s.lastOut ? `GPS 原本記到 ${hm(s.lastOut)} 下班，已預先填入。` : ''}`
       : `下班 ${hm(s.end)}，缺上班。`;
     $('#fixDialog').showModal();
-  });
+  }
   $('#fixForm').addEventListener('submit', async (e) => {
     if (e.submitter && e.submitter.value === 'cancel') return;
     const f = e.target.elements;

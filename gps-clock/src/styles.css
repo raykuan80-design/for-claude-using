@@ -119,3 +119,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .tip-row.miss { opacity: .6; font-size: 12px; }
 #scheduleForm textarea { font: 13px/1.5 ui-monospace, Menlo, monospace; box-sizing: border-box; }
 #scheduleInfo .errs { color: var(--danger, #e5484d); margin: 6px 0 0; padding-left: 18px; }
+
+.kpi.clickable { cursor: pointer; }
+.kpi.clickable:active { opacity: .7; }
+button.link { background: none; border: 0; padding: 0; color: var(--primary); font: inherit; text-decoration: underline; cursor: pointer; }
+#pendingList { margin-top: 10px; }
+#pendingList .tip-row { align-items: center; }
+.tip-row button.small { padding: 2px 8px; }
+#pendingList .tip-row:first-child { border-top: 0; }

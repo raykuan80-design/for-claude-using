@@ -6,7 +6,7 @@
 //   2026-10-19 停課 國二理化              這天停某堂課（寫課名或地點；只寫「停課」= 當天全停）
 //   2026-10-26 13:30-16:30 名揚 國三理化  這天多一堂課（補課、加課、調課）
 //   # 開頭是註解
-import { toSec, fromSec, isValid, pad } from './time.js?v=202611081552';
+import { toSec, fromSec, isValid, pad } from './time.js?v=202611091423';
 
 const WD = '日一二三四五六';
 const TIME = /^(\d{1,2})[:：](\d{2})\s*[-–－~～到至]\s*(\d{1,2})[:：](\d{2})$/;

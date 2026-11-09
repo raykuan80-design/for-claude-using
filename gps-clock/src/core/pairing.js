@@ -1,8 +1,9 @@
 // 工時配對（純函式）。把打卡事件配成工作時段。
-import { toSec, fromSec, dateOf } from './time.js?v=202611081552';
+import { toSec, fromSec, dateOf } from './time.js?v=202611091423';
 
 export const DEFAULT_RULES = { mergeGapMinutes: 10, minSessionMinutes: 5 };
 const MAX_OPEN_SEC = 20 * 3600; // 偶爾會做到 16 小時以上（例如 14:00 到隔天 06:19）
+const REPEAT_IN_NEW_SEC = 8 * 3600;
 
 /**
  * @param {Array<{time,type,place,manual?}>} events
@@ -38,7 +39,8 @@ export function pairSessions(events, rules = {}, now) {
       const t = toSec(e.time);
       if (e.type === 'in') {
         if (open) {
-          if (t - toSec(open.start) > MAX_OPEN_SEC) {
+          // 上班中又來一筆上班：幾分鐘內是重複（GPS），隔了 8 小時以上代表上一段忘了打下班
+          if (t - toSec(open.start) > REPEAT_IN_NEW_SEC) {
             open.forcedMissingOut = true;
             closed.push(open);
             open = startNew(e);
