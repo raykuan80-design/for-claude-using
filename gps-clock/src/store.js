@@ -2,11 +2,12 @@
 // - 連線設定（含 Token）只存在這支手機的 localStorage，不會上傳。
 // - 打卡紀錄與地點設定存在 GitHub；本機保留一份快取，離線也能看。
 // - 離線時打的卡先放進待上傳清單，下次同步時補傳。
-import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611091423';
-import { GitHub } from './github.js?v=202611091423';
-import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611091423';
-import { DEFAULT_RULES } from './core/pairing.js?v=202611091423';
-import { taipeiString } from './core/time.js?v=202611091423';
+import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611121545';
+import { GitHub } from './github.js?v=202611121545';
+import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611121545';
+import { DEFAULT_RULES } from './core/pairing.js?v=202611121545';
+import { taipeiString } from './core/time.js?v=202611121545';
+import { expensePath, monthOfPath, parseExpenseFile, formatExpenseFile } from './core/expenses.js?v=202611121545';
 
 const CONN_KEY = 'gps-clock-conn';
 const CACHE_KEY = 'gps-clock-cache';
@@ -20,8 +21,9 @@ const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 export const getConn = () => load(CONN_KEY, null);
 export const setConn = (c) => (c ? save(CONN_KEY, c) : localStorage.removeItem(CONN_KEY));
 
-const emptyCache = () => ({ files: {}, settings: { places: [], rules: { ...DEFAULT_RULES }, schedule: '' }, settingsSha: null, syncedAt: null });
+const emptyCache = () => ({ files: {}, expenses: {}, settings: { places: [], rules: { ...DEFAULT_RULES }, schedule: '' }, settingsSha: null, syncedAt: null });
 let cache = load(CACHE_KEY, emptyCache());
+if (!cache.expenses) cache.expenses = {}; // 舊版快取沒有支出
 let outbox = load(OUTBOX_KEY, []);
 const persist = () => { save(CACHE_KEY, cache); save(OUTBOX_KEY, outbox); };
 
@@ -82,6 +84,18 @@ export async function sync() {
   await pool(toFetch, 6, async (f) => { next[f.path] = { sha: f.sha, text: await gh.getBlob(f.sha) }; });
   const before = allEvents().length;
   cache.files = next;
+
+  // 支出：expenses/yyyy-MM.json，一個月一個檔案
+  const nextExp = {};
+  const expFetch = [];
+  for (const f of files) {
+    const m = monthOfPath(f.path);
+    if (!m) continue;
+    const old = cache.expenses[m];
+    if (old && old.sha === f.sha) nextExp[m] = old; else expFetch.push({ ...f, month: m });
+  }
+  await pool(expFetch, 6, async (f) => { nextExp[f.month] = { sha: f.sha, items: parseExpenseFile(await gh.getBlob(f.sha)) }; });
+  cache.expenses = nextExp;
 
   const sf = files.find((f) => f.path === SETTINGS_PATH);
   // 舊版網頁存的快取沒有 schedule 欄位：不管 sha 有沒有變都重新讀一次設定檔
@@ -193,6 +207,68 @@ export async function saveSettings(settings) {
     cache.settingsSha = await gh.putFile(SETTINGS_PATH, text, '更新打卡設定', cur && cur.sha);
   }
   persist();
+}
+
+// ---------- 支出 ----------
+/** 所有支出（每筆帶 month） */
+export function allExpenses() {
+  return Object.values(cache.expenses).flatMap((m) => m.items);
+}
+
+/**
+ * 修改某個月的支出檔案：change(items) 回傳新的陣列。
+ * GitHub 上的檔案若已被別的裝置改過（sha 對不上），重抓後再套用一次 change。
+ */
+async function changeExpenses(month, change, message) {
+  const gh = client();
+  const path = expensePath(month);
+  const write = async (cur) => {
+    const items = change(cur ? cur.items : []);
+    const text = formatExpenseFile(items);
+    const sha = items.length || cur
+      ? await gh.putFile(path, text, message, cur ? cur.sha : undefined)
+      : null;
+    cache.expenses[month] = { sha, items };
+    persist();
+  };
+  try {
+    await write(cache.expenses[month] && cache.expenses[month].sha ? cache.expenses[month] : null);
+  } catch (err) {
+    if (err.status !== 409 && err.status !== 422) throw err;
+    const f = await gh.getFile(path);
+    await write(f ? { sha: f.sha, items: parseExpenseFile(f.text) } : null);
+  }
+}
+
+/** 新增或修改一筆支出（e 已經過 cleanExpense）。改了日期跨月時，從舊的月份移走 */
+export async function saveExpense(e) {
+  const month = e.date.slice(0, 7);
+  const prev = allExpenses().find((x) => x.id === e.id);
+  const prevMonth = prev && prev.date.slice(0, 7);
+  const label = `${e.date} ${e.category} ${e.amount}`;
+  await changeExpenses(month, (items) => [...items.filter((x) => x.id !== e.id), e], prev ? `修改支出：${label}` : `新增支出：${label}`);
+  if (prevMonth && prevMonth !== month) await changeExpenses(prevMonth, (items) => items.filter((x) => x.id !== e.id), `移動支出：${label}`);
+}
+
+/** 一次新增很多筆（匯入用），每個月寫一次檔案。回傳新增筆數 */
+export async function addExpenses(list) {
+  const byMonth = new Map();
+  for (const e of list) {
+    const m = e.date.slice(0, 7);
+    if (!byMonth.has(m)) byMonth.set(m, []);
+    byMonth.get(m).push(e);
+  }
+  for (const [m, add] of byMonth) {
+    await changeExpenses(m, (items) => {
+      const have = new Set(items.map((x) => x.src).filter(Boolean));
+      return [...items, ...add.filter((x) => !x.src || !have.has(x.src))];
+    }, `匯入支出 ${add.length} 筆`);
+  }
+  return list.length;
+}
+
+export async function deleteExpense(e) {
+  await changeExpenses(e.date.slice(0, 7), (items) => items.filter((x) => x.id !== e.id), `刪除支出：${e.date} ${e.category} ${e.amount}`);
 }
 
 export function colorOf(place) {

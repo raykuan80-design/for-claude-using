@@ -1,11 +1,12 @@
 // 畫面與操作
-import * as store from './store.js?v=202611091423';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611091423';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611091423';
-import { nearestPlace } from './core/geo.js?v=202611091423';
-import { typeLabel } from './core/parse.js?v=202611091423';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611091423';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611091423';
+import * as store from './store.js?v=202611121545';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611121545';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611121545';
+import { nearestPlace } from './core/geo.js?v=202611121545';
+import { typeLabel } from './core/parse.js?v=202611121545';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611121545';
+import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611121545';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611121545';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -80,6 +81,7 @@ function render() {
   renderHome(ss);
   renderDetail(ss);
   renderEvents();
+  renderMoney(ss);
   renderSettings();
   renderHelp();
 }
@@ -128,6 +130,8 @@ function renderHome(raw) {
     kpi(`<span class="${st.pending ? 'danger' : ''}">${st.pending}</span>`, '待補打卡', st.pending ? 'pending' : '') +
     (st.classSec ? kpi(formatDuration(st.classSec), '其中上課') : '') +
     (st.pay !== null ? kpi('$' + st.pay.toLocaleString(), '預估薪資') : '');
+  const ex = expenseStats(store.allExpenses(), store.getSettings().fixedExpenses, state.month);
+  if (ex.total) $('#kpis').innerHTML += kpi('$' + ex.total.toLocaleString(), '本月支出', 'money');
 
   const pend = raw.filter((s) => s.date.startsWith(state.month) && isPending(s));
   if (!pend.length) state.showPending = false;
@@ -236,6 +240,92 @@ function renderEvents() {
   $('#parseErrors').innerHTML = errs.length ? '<p>無法辨識的檔案（例如測試時送出的空白打卡）：</p><ul class="event-list">' + errs.map((e, i) =>
     `<li><span>${esc(e.path.replace('punches/', ''))}：${esc(e.text) || '（空白）'}（${e.error}）</span><button class="ghost small danger" data-delfile="${i}" type="button">刪除</button></li>`).join('') + '</ul>' : '';
   $('#parseErrors')._errs = errs;
+}
+
+const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString();
+
+/** 類別建議：用過的（次數多的在前）＋預設 */
+function categories() {
+  const cnt = new Map();
+  for (const x of store.allExpenses()) cnt.set(x.category, (cnt.get(x.category) || 0) + 1);
+  const used = [...cnt].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  return [...new Set([...used, ...DEFAULT_CATEGORIES])];
+}
+
+function renderMoney(ss) {
+  const settings = store.getSettings();
+  const ex = expenseStats(store.allExpenses(), settings.fixedExpenses, state.month);
+  const income = monthStats(allocate(ss), state.month, settings.places).pay;
+  const kpi = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#moneyKpis').innerHTML =
+    kpi(money(ex.total), '本月支出') +
+    kpi(income !== null ? money(income) : '—', '預估收入（薪資）') +
+    (income !== null ? kpi(`<span class="${income - ex.total < 0 ? 'danger' : 'ok'}">${money(income - ex.total)}</span>`, '結餘') : '') +
+    kpi(money(ex.fixed), '其中固定支出');
+
+  const cats = categories();
+  $('#expCats').innerHTML = cats.map((c) => `<option value="${esc(c)}">`).join('');
+  $('#catChips').innerHTML = cats.slice(0, 10).map((c) => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  const f = $('#expForm').elements;
+  if (!f.date.value) f.date.value = state.month === monthOf(state.today) ? state.today : `${state.month}-01`;
+  $$('#catChips .chip').forEach((b) => b.classList.toggle('on', b.dataset.cat === f.category.value));
+  const ff = $('#fixedForm').elements;
+  if (!ff.from.value) ff.from.value = state.month;
+
+  const max = Math.max(1, ...ex.byCategory.map((c) => c.amount));
+  $('#expByCat').innerHTML = ex.byCategory.length ? ex.byCategory.map((c) => `<div class="cat-row">
+      <span class="cat-name">${esc(c.category)}</span>
+      <span class="cat-bar"><span style="width:${(c.amount / max) * 100}%"></span></span>
+      <span class="cat-amt">${money(c.amount)}<span class="muted small-text"> ${Math.round((c.amount / ex.total) * 100)}%</span></span></div>`).join('')
+    : '<p class="muted">這個月還沒有支出。</p>';
+
+  const srcTag = (x) => !x.src ? '' : x.src.startsWith('inv:') ? '<span class="tag">發票</span>' : '<span class="tag">刷卡</span>';
+  $('#expList').innerHTML = ex.items.length ? ex.items.map((x) => `<li class="${state.editExp === x.id ? 'editing' : ''}">
+      <button class="exp-item" data-edit="${esc(x.id)}" type="button"><span class="muted">${+x.date.slice(5, 7)}/${+x.date.slice(8)}</span> <b>${esc(x.category)}</b> ${esc(x.note)}${srcTag(x)}</button>
+      <span class="exp-amt">${money(x.amount)}</span>
+      <button class="ghost small danger" data-delexp="${esc(x.id)}" type="button">刪除</button></li>`).join('')
+    : '<li class="empty">這個月還沒有記帳。</li>';
+
+  const fixed = settings.fixedExpenses || [];
+  const active = fixed.filter((x) => !x.to || x.to >= state.month);
+  $('#fixedList').innerHTML = active.length ? active.map((x) => `<li>
+      <span><b>${esc(x.name)}</b> <span class="muted small-text">${esc(x.category)} · ${x.from.replace('-', '/')} 起${x.from > state.month ? '（還沒開始）' : ''}</span></span>
+      <span class="exp-amt">${money(x.amount)}</span>
+      <button class="ghost small danger" data-delfixed="${esc(x.id)}" type="button">刪除</button></li>`).join('')
+    : '<li class="empty">還沒有固定支出。</li>';
+  renderImportPreview();
+}
+
+/** 匯入預覽：每筆可勾選、改類別 */
+function renderImportPreview() {
+  const box = $('#expImportPreview');
+  const imp = state.imp;
+  if (!imp) { box.innerHTML = ''; return; }
+  const cats = categories();
+  const label = { new: '', dup: '<span class="tag">已匯入過</span>', maybe: '<span class="tag warn">可能重複</span>' };
+  const n = imp.items.filter((x) => x.on).length;
+  const sum = imp.items.filter((x) => x.on).reduce((a, x) => a + x.amount, 0);
+  box.innerHTML = `<p class="small-text">讀到 ${imp.kind} ${imp.items.length} 筆${imp.errors.length ? `，${imp.errors.length} 行看不懂已略過` : ''}。勾選要匯入的：</p>
+    <ul class="event-list imp-list">${imp.items.map((x, i) => `<li class="${x.status}">
+      <label class="check"><input type="checkbox" data-imp="${i}"${x.on ? ' checked' : ''}${x.status === 'dup' ? ' disabled' : ''}>
+        <span>${x.date.slice(5).replace('-', '/')} ${esc(x.note)}${label[x.status]}${x.twin ? `<span class="muted small-text">（已有 ${x.twin.date.slice(5).replace('-', '/')} ${esc(x.twin.note || x.twin.category)}）</span>` : ''}</span></label>
+      <select data-impcat="${i}">${[...new Set([x.category, ...cats])].map((c) => `<option${c === x.category ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <span class="exp-amt">${money(x.amount)}</span></li>`).join('')}</ul>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="impGo" type="button"${n ? '' : ' disabled'}>匯入勾選的 ${n} 筆（${money(sum)}）</button>
+      <button class="ghost" id="impCancel" type="button">取消</button>
+    </div>`;
+}
+
+function resetExpForm() {
+  state.editExp = null;
+  const form = $('#expForm');
+  const keepDate = form.elements.date.value;
+  form.reset();
+  form.elements.date.value = keepDate;
+  $('#expFormTitle').textContent = '記一筆';
+  $('#expForm button[type=submit]').textContent = '新增';
+  $('#expCancel').hidden = true;
 }
 
 function renderSettings() {
@@ -414,6 +504,7 @@ function bind() {
   });
   // 總覽：點「待補打卡」展開清單；清單和長條圖說明裡的按鈕可以直接補
   $('#tab-home').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="money"]')) { $('#tabs [data-tab=money]').click(); return; }
     const k = e.target.closest('[data-act="pending"]');
     if (k) { state.showPending = !state.showPending; $('#pendingList').hidden = !state.showPending; return; }
     const day = e.target.closest('[data-day]');
@@ -490,6 +581,138 @@ function bind() {
     const file = e.target.files[0];
     if (file) await doImport(await file.text());
     e.target.value = '';
+  });
+
+  // 支出分頁
+  $('#catChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cat]');
+    if (!b) return;
+    $('#expForm').elements.category.value = b.dataset.cat;
+    $$('#catChips .chip').forEach((x) => x.classList.toggle('on', x === b));
+  });
+  $('#expForm').elements.category.addEventListener('input', (e) =>
+    $$('#catChips .chip').forEach((x) => x.classList.toggle('on', x.dataset.cat === e.target.value)));
+  $('#expForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const f = e.target.elements;
+    const prev = state.editExp && store.allExpenses().find((x) => x.id === state.editExp);
+    let item;
+    try {
+      item = cleanExpense({ id: state.editExp || undefined, src: prev && prev.src, date: f.date.value, amount: f.amount.value, category: f.category.value, note: f.note.value });
+    } catch (err) { toast(err.message); return; }
+    const btn = $('#expForm button[type=submit]');
+    btn.disabled = true;
+    try {
+      await store.saveExpense(item);
+      toast(prev ? '已修改' : `已記下 ${item.category} $${item.amount.toLocaleString()}`);
+      if (item.date.slice(0, 7) !== state.month) state.month = item.date.slice(0, 7);
+      resetExpForm();
+    } catch (err) { toast('儲存失敗：' + errMsg(err), 4000); }
+    btn.disabled = false;
+    render();
+  });
+  $('#expCancel').addEventListener('click', () => { resetExpForm(); render(); });
+  $('#expList').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) {
+      const x = store.allExpenses().find((i) => i.id === ed.dataset.edit);
+      if (!x) return;
+      state.editExp = x.id;
+      const f = $('#expForm').elements;
+      f.date.value = x.date; f.amount.value = x.amount; f.category.value = x.category; f.note.value = x.note || '';
+      $('#expFormTitle').textContent = '修改這筆';
+      $('#expForm button[type=submit]').textContent = '儲存';
+      $('#expCancel').hidden = false;
+      render();
+      $('#expForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const del = e.target.closest('[data-delexp]');
+    if (del) {
+      const x = store.allExpenses().find((i) => i.id === del.dataset.delexp);
+      if (x) twoStep(del, async () => { await store.deleteExpense(x); if (state.editExp === x.id) resetExpForm(); toast('已刪除'); render(); });
+    }
+  });
+  $('#expExportBtn').addEventListener('click', () => {
+    const blob = new Blob([expensesCsv(store.allExpenses(), store.getSettings().fixedExpenses, state.month)], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `支出-${state.month}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  // 匯入發票／信用卡
+  const readImport = (text) => {
+    const r = parseImport(text);
+    if (!r.items.length) { toast(r.errors.length ? '看不懂這個檔案：找不到日期和金額' : '沒有可以匯入的消費'); return; }
+    const marked = markImport(r.items, store.allExpenses());
+    state.imp = { kind: r.kind, errors: r.errors, items: marked.map((x) => ({ ...x, on: x.status === 'new' })) };
+    renderImportPreview();
+  };
+  $('#expImportBtn').addEventListener('click', () => readImport($('#expImportText').value));
+  $('#expImportFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder('utf-8').decode(buf);
+    if (text.includes('\uFFFD')) { try { text = new TextDecoder('big5').decode(buf); } catch { /* 沒有 big5 就用 utf-8 */ } } // 銀行常用 Big5
+    readImport(text);
+  });
+  $('#expImportPreview').addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-imp]');
+    if (cb) { state.imp.items[+cb.dataset.imp].on = cb.checked; renderImportPreview(); return; }
+    const sel = e.target.closest('[data-impcat]');
+    if (sel) state.imp.items[+sel.dataset.impcat].category = sel.value;
+  });
+  $('#expImportPreview').addEventListener('click', async (e) => {
+    if (e.target.closest('#impCancel')) { state.imp = null; renderImportPreview(); return; }
+    const go = e.target.closest('#impGo');
+    if (!go) return;
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const list = state.imp.items.filter((x) => x.on).map(({ date, amount, category, note, src }) => cleanExpense({ date, amount, category, note, src }));
+    go.disabled = true; go.textContent = '匯入中…';
+    try {
+      const n = await store.addExpenses(list);
+      state.imp = null; $('#expImportText').value = '';
+      toast(`已匯入 ${n} 筆`);
+      const months = [...new Set(list.map((x) => x.date.slice(0, 7)))].sort();
+      if (months.length && !months.includes(state.month)) state.month = months[months.length - 1];
+    } catch (err) { toast('匯入失敗：' + errMsg(err), 4000); go.disabled = false; }
+    render();
+  });
+
+  $('#fixedForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const f = e.target.elements;
+    const amount = Math.round(Number(f.amount.value));
+    if (!(amount > 0)) { toast('金額要大於 0'); return; }
+    const name = f.name.value.trim();
+    const item = { id: newId(), name, amount, category: f.category.value.trim() || name || '其他', from: f.from.value };
+    const s = store.getSettings();
+    try {
+      await store.saveSettings({ ...s, fixedExpenses: [...(s.fixedExpenses || []), item] });
+      toast(`已加入固定支出：${name}`);
+      e.target.reset();
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    render();
+  });
+  $('#fixedList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delfixed]');
+    if (!b) return;
+    twoStep(b, async () => {
+      const s = store.getSettings();
+      const prev = shiftMonth(state.month, -1);
+      // 還沒開始過的直接刪掉；用過的只是從這個月起停止，以前的月份照算
+      const list = (s.fixedExpenses || []).flatMap((x) => x.id !== b.dataset.delfixed ? [x]
+        : x.from >= state.month ? [] : [{ ...x, to: prev }]);
+      await store.saveSettings({ ...s, fixedExpenses: list });
+      toast(`已刪除，${state.month.replace('-', '/')} 起不再計入`);
+      render();
+    });
   });
 
   // 設定分頁

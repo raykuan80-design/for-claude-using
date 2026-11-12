@@ -14,7 +14,8 @@ iPhone「捷徑」在抵達／離開工作地點時，自動把一筆打卡寫�
 | 路徑 | 內容 |
 |---|---|
 | `punches/*.csv` | 打卡紀錄，每個檔案一行或多行 `yyyy-MM-dd HH:mm:ss,上班或下班,地點[,手動]` |
-| `gps-clock-settings.json` | 地點（名稱、時薪、顏色、座標、範圍）與配對規則 |
+| `gps-clock-settings.json` | 地點（名稱、時薪、顏色、座標、範圍）、配對規則、課表、固定支出（`fixedExpenses`） |
+| `expenses/yyyy-MM.json` | 當月支出 `{ items: [{ id, date, amount, category, note, src? }] }`；`src` 是匯入來源（`inv:發票號碼`／`card:…`），用來避免重複匯入 |
 
 捷徑寫入的檔名是 `punches/yyyyMMdd-HHmmss.csv`；網頁打卡是 `punches/yyyyMMdd-HHmmss-in|out-m.csv`；匯入是 `punches/import-….csv`。
 去重用「時間＋類型＋地點」。
@@ -38,15 +39,21 @@ iPhone「捷徑」在抵達／離開工作地點時，自動把一筆打卡寫�
 算工時前，每段打卡時段裡和課表重疊的時間會切出來，改算到上課地點（帶 `course`），其餘留在原地點。
 已經上完但沒打到卡的課（或沒打到的那一段）也照課表直接補上，明細裡標「照課表」。地點的 `payUnit: "class"` 表示薪資按堂算（每段一堂）。
 
+## 支出（`src/core/expenses.js`）
+
+「支出」分頁：記帳、各類別小計、和當月預估薪資對照算結餘、固定支出（從 `from` 月起每月自動計入，刪除時設 `to` 為上個月）。
+匯入：財政部電子發票平台「載具消費明細」CSV（`M|…`／`D|…`）或任何有日期＋金額欄的信用卡帳單 CSV（支援民國年、Big5）。
+類別照店名猜。和既有支出同金額、日期差 3 天內且來源不同的，標「可能重複」、預設不勾。
+
 ## 檔案
 
 | 路徑 | 內容 |
 |---|---|
-| `index.html` | 5 個分頁：總覽、明細、紀錄、設定、說明（含捷徑設定步驟） |
+| `index.html` | 6 個分頁：總覽、明細、紀錄、支出、設定、說明（含捷徑設定步驟） |
 | `src/app.js` | 畫面與操作 |
 | `src/store.js` | 本機快取、離線待上傳、和 GitHub 同步 |
 | `src/github.js` | GitHub REST API |
-| `src/core/` | 純函式：`time`、`parse`、`pairing`、`stats`、`geo`、`schedule`（測試都在這層） |
+| `src/core/` | 純函式：`time`、`parse`、`pairing`、`stats`、`geo`、`schedule`、`expenses`（測試都在這層） |
 | `test/` | 單元測試 |
 | `scripts/serve.mjs` | 本機伺服器 |
 | `scripts/make-icons.mjs` | 用 Playwright 產生 PNG 圖示 |

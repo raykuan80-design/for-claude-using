@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="src/styles.css?v=202611091423">
+<link rel="stylesheet" href="src/styles.css?v=202611121545">
 </head>
 <body>
 <header class="top">
@@ -22,6 +22,7 @@
   <button data-tab="home" class="active">總覽</button>
   <button data-tab="detail">明細</button>
   <button data-tab="events">紀錄</button>
+  <button data-tab="money">支出</button>
   <button data-tab="settings">設定</button>
   <button data-tab="help">說明</button>
 </nav>
@@ -103,6 +104,67 @@
     </div>
     <ul id="eventList" class="event-list"></ul>
     <div id="parseErrors" class="muted small-text"></div>
+  </section>
+
+  <!-- 支出 -->
+  <section id="tab-money" class="tab" hidden>
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <div class="kpis" id="moneyKpis"></div>
+
+    <div class="card">
+      <h2 id="expFormTitle">記一筆</h2>
+      <form id="expForm" class="grid-form">
+        <label class="field">日期<input type="date" name="date" required></label>
+        <label class="field">金額<input type="number" name="amount" min="1" step="1" inputmode="numeric" placeholder="0" required></label>
+        <label class="field">類別<input name="category" list="expCats" autocomplete="off" placeholder="餐飲"></label>
+        <label class="field">備註<input name="note" autocomplete="off" placeholder="（選填）"></label>
+        <div class="cat-chips full" id="catChips"></div>
+        <button class="primary" type="submit">新增</button>
+        <button class="ghost" id="expCancel" type="button" hidden>取消修改</button>
+      </form>
+      <datalist id="expCats"></datalist>
+    </div>
+
+    <div class="card"><h2>各類別</h2><div id="expByCat"></div></div>
+
+    <div class="card">
+      <h2>匯入發票／信用卡帳單</h2>
+      <details class="small-text"><summary>怎麼拿到檔案</summary>
+        <ul>
+          <li><b>手機條碼的電子發票</b>：到<a href="https://www.einvoice.nat.gov.tw/" target="_blank" rel="noopener">財政部電子發票整合服務平台</a>登入 › 個人（手機條碼）› 載具消費發票查詢 › 選月份查詢 › 「匯出 CSV」（會寄到你的信箱或直接下載）。</li>
+          <li><b>信用卡帳單</b>：在銀行網銀／App 的「帳單明細」或「未出帳消費」下載 CSV 或 Excel（Excel 請另存成 CSV）。也可以直接複製帳單表格貼到下面。</li>
+          <li>只要有「日期」和「金額」欄就能讀；類別會照店名自動猜，匯入前可以改。</li>
+          <li><b>刷卡又有發票的同一筆</b>會被標成「可能重複」、預設不勾。建議以發票為主（有品項），信用卡只補沒有發票的消費（例如國外、網購、保費）。</li>
+        </ul>
+      </details>
+      <input type="file" id="expImportFile" accept=".csv,.txt,text/csv,text/plain">
+      <textarea id="expImportText" rows="3" placeholder="或把帳單內容貼在這裡"></textarea>
+      <button id="expImportBtn" class="ghost" type="button">讀取貼上的內容</button>
+      <div id="expImportPreview"></div>
+    </div>
+
+    <div class="row between">
+      <h2 style="margin:0">本月明細</h2>
+      <button id="expExportBtn" class="ghost small" type="button">匯出 CSV</button>
+    </div>
+    <ul id="expList" class="event-list"></ul>
+
+    <div class="card">
+      <h2>固定支出</h2>
+      <p class="muted small-text">每個月都有的（房租、電話費、保險…）。從加入的月份起每月自動算進去；刪除後以前的月份不受影響。</p>
+      <ul id="fixedList" class="event-list"></ul>
+      <form id="fixedForm" class="grid-form" style="margin-top:10px">
+        <label class="field">名稱<input name="name" required placeholder="房租"></label>
+        <label class="field">每月金額<input type="number" name="amount" min="1" step="1" inputmode="numeric" required></label>
+        <label class="field">類別<input name="category" list="expCats" autocomplete="off" placeholder="房租"></label>
+        <label class="field">從哪個月開始<input type="month" name="from" required></label>
+        <button class="ghost full" type="submit">＋ 加入固定支出</button>
+      </form>
+    </div>
   </section>
 
   <!-- 設定 -->
@@ -233,6 +295,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="src/app.js?v=202611091423"></script>
+<script type="module" src="src/app.js?v=202611121545"></script>
 </body>
 </html>

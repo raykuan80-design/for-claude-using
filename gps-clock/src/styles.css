@@ -127,3 +127,24 @@ button.link { background: none; border: 0; padding: 0; color: var(--primary); fo
 #pendingList .tip-row { align-items: center; }
 .tip-row button.small { padding: 2px 8px; }
 #pendingList .tip-row:first-child { border-top: 0; }
+
+/* 支出 */
+.grid-form .full { grid-column: 1 / -1; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 4px 12px; font-size: 14px; border-radius: 99px; background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+.chip.on { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+.cat-row { display: grid; grid-template-columns: 5.5em 1fr auto; gap: 10px; align-items: center; padding: 5px 0; }
+.cat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-bar { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; }
+.cat-bar span { display: block; height: 100%; background: var(--alt); border-radius: 99px; }
+.cat-amt { text-align: right; white-space: nowrap; }
+.exp-item { flex: 1; text-align: left; background: none; border: 0; padding: 0; color: var(--text); white-space: normal; min-width: 0; }
+.exp-amt { white-space: nowrap; font-weight: 600; }
+#expList li.editing { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+.ok { color: var(--ok); }
+.tag.warn { color: var(--warn); }
+.imp-list { max-height: 420px; overflow-y: auto; margin-top: 8px; }
+.imp-list li { font-size: 14px; }
+.imp-list .check { flex: 1; min-width: 0; align-items: flex-start; }
+.imp-list select { width: auto; padding: 4px 6px; font-size: 13px; }
+.imp-list li.dup { opacity: .5; }
