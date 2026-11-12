@@ -113,3 +113,20 @@ test('猜類別', () => {
   assert.equal(guessCategory('中華電信'), '電話網路');
   assert.equal(guessCategory('不知名'), '其他');
 });
+
+import { parseInbox, amountFrom, isInboxPath } from '../src/core/expenses.js';
+
+test('Apple Pay 捷徑寫入的消費', () => {
+  const p = 'expenses/inbox/20261112-123000.csv';
+  assert.ok(isInboxPath(p));
+  assert.ok(!isInboxPath('expenses/2026-11.json'));
+  assert.deepEqual(parseInbox('2026-11-12 12:30:00,NT$1,234.00,全聯福利中心,國泰 Cube\n', p),
+    { date: '2026-11-12', amount: 1234, category: '日用品', note: '全聯福利中心（國泰 Cube）', src: 'pay:20261112-123000.csv' });
+  assert.equal(parseInbox('2026-11-12 08:01:02,$85,7-ELEVEN', p).category, '餐飲');
+  assert.equal(parseInbox('2026-11-12 08:01:02,85.5 TWD,星巴克', p).amount, 86);
+  assert.equal(parseInbox('2026-11-12 08:01:02,150', p).note, '');
+  assert.equal(parseInbox('', p), null);
+  assert.equal(parseInbox('2026-11-12 08:01:02,,星巴克', p), null);
+  assert.equal(parseInbox('2026-11-12 08:01:02,NT$12345,momo', p).amount, 12345);
+  assert.equal(amountFrom('ＮＴ＄１２０'), 120);
+});

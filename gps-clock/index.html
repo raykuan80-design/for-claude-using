@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="src/styles.css?v=202611121545">
+<link rel="stylesheet" href="src/styles.css?v=202611121559">
 </head>
 <body>
 <header class="top">
@@ -129,6 +129,7 @@
       <datalist id="expCats"></datalist>
     </div>
 
+    <div class="card tip" id="inboxBad" hidden></div>
     <div class="card"><h2>各類別</h2><div id="expByCat"></div></div>
 
     <div class="card">
@@ -147,6 +148,7 @@
       <div id="expImportPreview"></div>
     </div>
 
+    <p class="muted small-text">用 Apple Pay 付款想自動記帳？看「說明 › <a href="#help-pay" data-goto-help>Apple Pay 自動記帳</a>」。</p>
     <div class="row between">
       <h2 style="margin:0">本月明細</h2>
       <button id="expExportBtn" class="ghost small" type="button">匯出 CSV</button>
@@ -268,6 +270,19 @@
         <li>再建一個「離開」自動化，文字改成 <code>下班,地點名稱</code>。</li>
       </ol>
 
+      <h2 id="help-pay">5. Apple Pay 自動記帳（iOS 17 以上）</h2>
+      <p>每次用 Apple Pay 付款，自動把金額和店名記進「支出」。只要做一次：</p>
+      <ol>
+        <li><b>複製捷徑</b>：在捷徑 App 長按「寫入打卡」› 「複製」，把複本改名成「<b>寫入支出</b>」。</li>
+        <li>打開「寫入支出」，只改「取得 URL 內容」的網址：把裡面的 <code>punches/</code> 改成 <code>expenses/inbox/</code>，後面的「格式化的日期」和 <code>.csv</code> 不動。改好的網址開頭像這樣：
+          <div class="copy"><code id="payUrl"></code><button class="ghost small" id="copyPayUrl" type="button">複製</button></div></li>
+        <li><b>建立自動化</b>：捷徑 App › 自動化 › ＋ › 「<b>交易</b>」› 勾選你所有的卡片 › 選「<b>立即執行</b>」› 下一步 › 新增空白自動化。</li>
+        <li>加「<b>文字</b>」動作：插入變數「捷徑輸入」，點它改選「<b>金額</b>」；打一個半形逗號 <code>,</code>；再插入「捷徑輸入」改選「<b>商家</b>」。看起來像 <code>[金額],[商家]</code>。想記是哪張卡，可以再加逗號和「卡片」或「名稱」。</li>
+        <li>再加「<b>執行捷徑</b>」，選「寫入支出」，輸入是上一步的「文字」。</li>
+      </ol>
+      <p>測試：手動執行「寫入支出」，輸入 <code>100,測試商店</code>，回網頁按「同步」，「支出」分頁應該會多一筆 $100 的「測試商店」（測完刪掉）。</p>
+      <p class="muted small-text">付款後消費先存在紀錄存放庫的 <code>expenses/inbox/</code>，打開網頁或按「同步」時才會搬進當月支出並猜好類別。實體卡刷卡、網購輸入卡號不會觸發，這些用「支出 › 匯入」補。</p>
+
       <h2>注意事項</h2>
       <ul>
         <li>地點名稱在捷徑和「設定 › 地點」裡必須一字不差。</li>
@@ -295,6 +310,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="src/app.js?v=202611121545"></script>
+<script type="module" src="src/app.js?v=202611121559"></script>
 </body>
 </html>

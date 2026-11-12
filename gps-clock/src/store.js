@@ -2,12 +2,12 @@
 // - 連線設定（含 Token）只存在這支手機的 localStorage，不會上傳。
 // - 打卡紀錄與地點設定存在 GitHub；本機保留一份快取，離線也能看。
 // - 離線時打的卡先放進待上傳清單，下次同步時補傳。
-import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611121545';
-import { GitHub } from './github.js?v=202611121545';
-import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611121545';
-import { DEFAULT_RULES } from './core/pairing.js?v=202611121545';
-import { taipeiString } from './core/time.js?v=202611121545';
-import { expensePath, monthOfPath, parseExpenseFile, formatExpenseFile } from './core/expenses.js?v=202611121545';
+import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611121559';
+import { GitHub } from './github.js?v=202611121559';
+import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611121559';
+import { DEFAULT_RULES } from './core/pairing.js?v=202611121559';
+import { taipeiString } from './core/time.js?v=202611121559';
+import { expensePath, monthOfPath, parseExpenseFile, formatExpenseFile, isInboxPath, parseInbox, newId } from './core/expenses.js?v=202611121559';
 
 const CONN_KEY = 'gps-clock-conn';
 const CACHE_KEY = 'gps-clock-cache';
@@ -96,6 +96,7 @@ export async function sync() {
   }
   await pool(expFetch, 6, async (f) => { nextExp[f.month] = { sha: f.sha, items: parseExpenseFile(await gh.getBlob(f.sha)) }; });
   cache.expenses = nextExp;
+  const absorbed = await absorbInbox(gh, files.filter((f) => isInboxPath(f.path)));
 
   const sf = files.find((f) => f.path === SETTINGS_PATH);
   // 舊版網頁存的快取沒有 schedule 欄位：不管 sha 有沒有變都重新讀一次設定檔
@@ -109,7 +110,7 @@ export async function sync() {
   }
   cache.syncedAt = taipeiString();
   persist();
-  return { added: Math.max(0, allEvents().length - before), uploaded };
+  return { added: Math.max(0, allEvents().length - before), uploaded, absorbed };
 }
 
 async function flushOutbox(gh) {
@@ -248,6 +249,36 @@ export async function saveExpense(e) {
   const label = `${e.date} ${e.category} ${e.amount}`;
   await changeExpenses(month, (items) => [...items.filter((x) => x.id !== e.id), e], prev ? `修改支出：${label}` : `新增支出：${label}`);
   if (prevMonth && prevMonth !== month) await changeExpenses(prevMonth, (items) => items.filter((x) => x.id !== e.id), `移動支出：${label}`);
+}
+
+/**
+ * Apple Pay 捷徑寫進 expenses/inbox/ 的消費：搬進當月支出檔，再刪掉 inbox 檔。
+ * 看不懂的檔案留著，列在 cache.inboxBad 讓使用者刪。回傳搬進來的筆數。
+ */
+async function absorbInbox(gh, files) {
+  cache.inboxBad = [];
+  if (!files.length) return 0;
+  const good = [];
+  await pool(files, 6, async (f) => {
+    const text = await gh.getBlob(f.sha);
+    const e = parseInbox(text, f.path);
+    if (e) good.push({ f, e: { id: newId(), ...e } });
+    else cache.inboxBad.push({ path: f.path, sha: f.sha, text: text.trim() });
+  });
+  if (good.length) await addExpenses(good.map((g) => g.e));
+  for (const { f } of good) {
+    try { await gh.deleteFile(f.path, f.sha, '已記入支出'); } catch { /* 別的裝置已經搬過了；src 相同不會重複記 */ }
+  }
+  persist();
+  return good.length;
+}
+
+export const inboxBad = () => cache.inboxBad || [];
+
+export async function deleteInboxFile(item) {
+  await client().deleteFile(item.path, item.sha, `刪除無法辨識的支出 ${item.path}`);
+  cache.inboxBad = inboxBad().filter((x) => x.path !== item.path);
+  persist();
 }
 
 /** 一次新增很多筆（匯入用），每個月寫一次檔案。回傳新增筆數 */

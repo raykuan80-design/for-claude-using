@@ -1,12 +1,12 @@
 // 畫面與操作
-import * as store from './store.js?v=202611121545';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611121545';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611121545';
-import { nearestPlace } from './core/geo.js?v=202611121545';
-import { typeLabel } from './core/parse.js?v=202611121545';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611121545';
-import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611121545';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611121545';
+import * as store from './store.js?v=202611121559';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611121559';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611121559';
+import { nearestPlace } from './core/geo.js?v=202611121559';
+import { typeLabel } from './core/parse.js?v=202611121559';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611121559';
+import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611121559';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611121559';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -279,7 +279,7 @@ function renderMoney(ss) {
       <span class="cat-amt">${money(c.amount)}<span class="muted small-text"> ${Math.round((c.amount / ex.total) * 100)}%</span></span></div>`).join('')
     : '<p class="muted">這個月還沒有支出。</p>';
 
-  const srcTag = (x) => !x.src ? '' : x.src.startsWith('inv:') ? '<span class="tag">發票</span>' : '<span class="tag">刷卡</span>';
+  const srcTag = (x) => !x.src ? '' : '<span class="tag">' + ({ inv: '發票', pay: 'Apple Pay' }[x.src.split(':')[0]] || '刷卡') + '</span>';
   $('#expList').innerHTML = ex.items.length ? ex.items.map((x) => `<li class="${state.editExp === x.id ? 'editing' : ''}">
       <button class="exp-item" data-edit="${esc(x.id)}" type="button"><span class="muted">${+x.date.slice(5, 7)}/${+x.date.slice(8)}</span> <b>${esc(x.category)}</b> ${esc(x.note)}${srcTag(x)}</button>
       <span class="exp-amt">${money(x.amount)}</span>
@@ -293,6 +293,10 @@ function renderMoney(ss) {
       <span class="exp-amt">${money(x.amount)}</span>
       <button class="ghost small danger" data-delfixed="${esc(x.id)}" type="button">刪除</button></li>`).join('')
     : '<li class="empty">還沒有固定支出。</li>';
+  const bad = store.inboxBad();
+  $('#inboxBad').hidden = !bad.length;
+  $('#inboxBad').innerHTML = bad.length ? `<p class="small-text">Apple Pay 捷徑寫入的這幾筆看不懂（要是「金額,商家」）：</p>` + bad.map((x, i) =>
+    `<div class="tip-row"><span>${esc(x.path.split('/').pop())}：${esc(x.text) || '（空白）'}</span><button class="ghost small danger" data-delinbox="${i}" type="button">刪除</button></div>`).join('') : '';
   renderImportPreview();
 }
 
@@ -380,6 +384,9 @@ function renderHelp() {
   const url = `https://api.github.com/repos/${c ? c.owner : '你的帳號'}/${c ? c.repo : 'gps-clock-data'}/contents/punches/[格式化的日期].csv`;
   $('#shortcutUrl').textContent = url;
   $('#copyUrl').dataset.copy = url.replace('[格式化的日期].csv', '');
+  const pay = url.replace('punches/[格式化的日期].csv', 'expenses/inbox/');
+  $('#payUrl').textContent = pay + '[格式化的日期].csv';
+  $('#copyPayUrl').dataset.copy = pay;
 }
 
 // ---------- 同步 ----------
@@ -388,7 +395,7 @@ async function doSync({ quiet = false } = {}) {
   state.syncing = true; state.lastSyncTry = Date.now(); renderBanner();
   try {
     const r = await store.sync();
-    if (!quiet) toast(`已同步${r.added ? `，新增 ${r.added} 筆` : ''}${r.uploaded ? `，補傳 ${r.uploaded} 筆` : ''}`);
+    if (!quiet || r.absorbed) toast(`已同步${r.added ? `，新增 ${r.added} 筆` : ''}${r.uploaded ? `，補傳 ${r.uploaded} 筆` : ''}${r.absorbed ? `，Apple Pay 記了 ${r.absorbed} 筆支出` : ''}`);
   } catch (e) {
     if (!quiet || !(e instanceof TypeError)) toast('同步失敗：' + errMsg(e), 4000);
   } finally {
@@ -641,6 +648,18 @@ function bind() {
     a.download = `支出-${state.month}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  $('#inboxBad').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delinbox]');
+    if (!b) return;
+    const item = store.inboxBad()[+b.dataset.delinbox];
+    twoStep(b, async () => { await store.deleteInboxFile(item); toast('已刪除'); render(); });
+  });
+  $('[data-goto-help]').addEventListener('click', (e) => {
+    e.preventDefault();
+    $('#tabs [data-tab=help]').click();
+    $('#help-pay').scrollIntoView();
   });
 
   // 匯入發票／信用卡

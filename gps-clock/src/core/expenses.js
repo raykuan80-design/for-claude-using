@@ -219,3 +219,38 @@ export function markImport(items, existing) {
     return { ...x, status: 'new' };
   });
 }
+
+// ---------- Apple Pay 捷徑自動記帳 ----------
+// 捷徑「寫入支出」每次付款寫一個檔案 expenses/inbox/yyyyMMdd-HHmmss.csv，內容一行：
+//   yyyy-MM-dd HH:mm:ss,金額,商家[,卡片]
+// 金額可能是「NT$1,234.00」「$150」「150 TWD」。網頁同步時把它們搬進當月的 expenses/yyyy-MM.json。
+
+export const isInboxPath = (p) => /^expenses\/inbox\/[^/]+\.(csv|txt)$/i.test(p);
+
+/** 從「NT$1,234.00」這類文字取出金額 */
+export function amountFrom(s) {
+  const m = /-?\d[\d,]*(\.\d+)?/.exec(String(s || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)));
+  return m ? Number(m[0].replace(/,/g, '')) : NaN;
+}
+
+/** inbox 檔案 → 支出（不合法回傳 null） */
+export function parseInbox(text, path) {
+  const line = String(text || '').replace(/^﻿/, '').split(/\r?\n/).find((l) => l.trim());
+  if (!line) return null;
+  // 金額可能含千分位逗號（1,234），所以先切出時間，再找第一個像金額的片段
+  const m = /^(\d{4}-\d{2}-\d{2}) \d{2}:\d{2}(:\d{2})?\s*,\s*(.*)$/.exec(line.trim());
+  if (!m) return null;
+  const rest = m[3];
+  // 金額可能有千分位（1,234）：逗號後面剛好 3 位數字才算金額的一部分，其他逗號是欄位分隔
+  const am = /^[^,\d]*\d+(,\d{3})*(\.\d+)?[^,\d]*/.exec(rest);
+  const amtText = am ? am[0] : '';
+  const amount = Math.round(amountFrom(amtText));
+  if (!(amount > 0)) return null;
+  const fields = rest.slice(amtText.length).replace(/^\s*,/, '').split(',').map((x) => x.trim());
+  const merchant = fields[0] || '';
+  const card = fields.slice(1).filter(Boolean).join(' ');
+  return {
+    date: m[1], amount, category: guessCategory(merchant),
+    note: merchant + (card ? `（${card}）` : ''), src: `pay:${path.split('/').pop()}`,
+  };
+}
