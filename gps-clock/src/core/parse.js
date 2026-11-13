@@ -1,5 +1,5 @@
 // 打卡紀錄 CSV 解析（寬鬆）。每行：時間,類型,地點[,手動]
-import { fromSec, toSec, isValid, pad } from './time.js?v=202611121559';
+import { fromSec, toSec, isValid, pad } from './time.js?v=202611130957';
 
 const TYPE_MAP = {
   '上班': 'in', '抵達': 'in', 'in': 'in', '到達': 'in',

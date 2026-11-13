@@ -130,3 +130,13 @@ test('Apple Pay 捷徑寫入的消費', () => {
   assert.equal(parseInbox('2026-11-12 08:01:02,NT$12345,momo', p).amount, 12345);
   assert.equal(amountFrom('ＮＴ＄１２０'), 120);
 });
+
+import { isBlankInbox } from '../src/core/expenses.js';
+
+test('Apple Pay 自動化重複觸發的空白紀錄', () => {
+  assert.ok(isBlankInbox('2026-11-13 07:54:33,,\n'));
+  assert.ok(isBlankInbox('2026-11-13 07:54:33,'));
+  assert.ok(!isBlankInbox('2026-11-13 07:54:33,NT$142,President'));
+  assert.ok(!isBlankInbox('2026-11-13 07:54:33,測試'));
+  assert.equal(parseInbox('2026-11-13 07:54:29,NT$142.00,President', 'expenses/inbox/a.csv').category, '餐飲');
+});

@@ -2,12 +2,12 @@
 // - 連線設定（含 Token）只存在這支手機的 localStorage，不會上傳。
 // - 打卡紀錄與地點設定存在 GitHub；本機保留一份快取，離線也能看。
 // - 離線時打的卡先放進待上傳清單，下次同步時補傳。
-import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611121559';
-import { GitHub } from './github.js?v=202611121559';
-import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611121559';
-import { DEFAULT_RULES } from './core/pairing.js?v=202611121559';
-import { taipeiString } from './core/time.js?v=202611121559';
-import { expensePath, monthOfPath, parseExpenseFile, formatExpenseFile, isInboxPath, parseInbox, newId } from './core/expenses.js?v=202611121559';
+import { parseSchedule, schedulePlaces } from './core/schedule.js?v=202611130957';
+import { GitHub } from './github.js?v=202611130957';
+import { parseText, eventKey, formatLine, eventPath, dedupe } from './core/parse.js?v=202611130957';
+import { DEFAULT_RULES } from './core/pairing.js?v=202611130957';
+import { taipeiString } from './core/time.js?v=202611130957';
+import { expensePath, monthOfPath, parseExpenseFile, formatExpenseFile, isInboxPath, parseInbox, isBlankInbox, newId } from './core/expenses.js?v=202611130957';
 
 const CONN_KEY = 'gps-clock-conn';
 const CACHE_KEY = 'gps-clock-cache';
@@ -259,13 +259,18 @@ async function absorbInbox(gh, files) {
   cache.inboxBad = [];
   if (!files.length) return 0;
   const good = [];
+  const blank = [];
   await pool(files, 6, async (f) => {
     const text = await gh.getBlob(f.sha);
     const e = parseInbox(text, f.path);
     if (e) good.push({ f, e: { id: newId(), ...e } });
+    else if (isBlankInbox(text)) blank.push(f);
     else cache.inboxBad.push({ path: f.path, sha: f.sha, text: text.trim() });
   });
   if (good.length) await addExpenses(good.map((g) => g.e));
+  for (const f of blank) { // 空白的直接刪掉，不用讓使用者處理
+    try { await gh.deleteFile(f.path, f.sha, '刪除空白的 Apple Pay 紀錄'); } catch { /* 已經刪過 */ }
+  }
   for (const { f } of good) {
     try { await gh.deleteFile(f.path, f.sha, '已記入支出'); } catch { /* 別的裝置已經搬過了；src 相同不會重複記 */ }
   }

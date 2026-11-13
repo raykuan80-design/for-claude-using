@@ -73,7 +73,7 @@ const GUESS = [
   ['購物', /momo|蝦皮|Shopee|PChome|博客來|Yahoo|雅虎|酷澎|Coupang|淘寶|Amazon|UNIQLO|\bNET\b|誠品|燦坤|全國電子|Apple/i],
   ['娛樂', /Netflix|Spotify|YouTube|Disney|KKBOX|電影|影城|威秀|Steam|PlayStation|Nintendo|任天堂|KTV|錢櫃|好樂迪/i],
   ['學習', /書局|文具|補習|課程|Hahow|Udemy|金石堂/],
-  ['餐飲', /統一超商|7-?ELEVEN|全家|萊爾富|來來超商|OK超商|麥當勞|肯德基|摩斯|星巴克|路易莎|85度C|咖啡|餐|飲|食|麵|飯|小吃|早午|便當|火鍋|燒肉|壽司|飲料|茶|Uber ?Eats|foodpanda|熊貓/i],
+  ['餐飲', /統一超商|7-?ELEVEN|President|全家|萊爾富|來來超商|OK超商|麥當勞|肯德基|摩斯|星巴克|路易莎|85度C|咖啡|餐|飲|食|麵|飯|小吃|早午|便當|火鍋|燒肉|壽司|飲料|茶|Uber ?Eats|foodpanda|熊貓/i],
 ];
 
 /** 依商店名稱／品項猜類別 */
@@ -231,6 +231,12 @@ export const isInboxPath = (p) => /^expenses\/inbox\/[^/]+\.(csv|txt)$/i.test(p)
 export function amountFrom(s) {
   const m = /-?\d[\d,]*(\.\d+)?/.exec(String(s || '').replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)));
   return m ? Number(m[0].replace(/,/g, '')) : NaN;
+}
+
+/** 只有時間、沒有金額和商家的 inbox 檔（Apple Pay 自動化有時會連跑兩次，第二次是空的） */
+export function isBlankInbox(text) {
+  const line = String(text || '').replace(/^\uFEFF/, '').trim();
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?[\s,]*$/.test(line);
 }
 
 /** inbox 檔案 → 支出（不合法回傳 null） */
