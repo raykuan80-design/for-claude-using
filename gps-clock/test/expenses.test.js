@@ -140,3 +140,9 @@ test('Apple Pay 自動化重複觸發的空白紀錄', () => {
   assert.ok(!isBlankInbox('2026-11-13 07:54:33,測試'));
   assert.equal(parseInbox('2026-11-13 07:54:29,NT$142.00,President', 'expenses/inbox/a.csv').category, '餐飲');
 });
+
+test('AI／Canva 訂閱自動分類', () => {
+  assert.equal(guessCategory('OPENAI *CHATGPT SUBSCR'), 'AI／Canva 訂閱');
+  assert.equal(guessCategory('CANVA* 04512345'), 'AI／Canva 訂閱');
+  assert.equal(guessCategory('ANTHROPIC CLAUDE.AI'), 'AI／Canva 訂閱');
+});
