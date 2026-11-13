@@ -3,7 +3,7 @@
 // 從 from 那個月起每個月自動算進去；刪除時只把 to 設成上個月，以前的月份照舊。
 
 export const AI_CATEGORY = 'AI／Canva 訂閱';
-export const DEFAULT_CATEGORIES = ['餐飲', '交通', '房租', '水電瓦斯', '電話網路', '日用品', '購物', '娛樂', '醫療', '保險', '學習', AI_CATEGORY, '其他'];
+export const DEFAULT_CATEGORIES = ['餐飲', '交通', '房租', '水電瓦斯', '電話網路', '日用品', '購物', '娛樂', '醫療', '保險', '學習', AI_CATEGORY, 'Google', 'Apple', 'Spotify', '其他'];
 
 export const expensePath = (month) => `expenses/${month}.json`;
 export const monthOfPath = (path) => (/^expenses\/(\d{4}-\d{2})\.json$/.exec(path) || [])[1] || null;
@@ -66,6 +66,9 @@ export function expensesCsv(items, fixed, month) {
 
 const GUESS = [
   ['AI／Canva 訂閱', /Claude|Anthropic|OpenAI|ChatGPT|Canva|Midjourney|Gemini|Perplexity|Cursor|Copilot|Higgsfield|Notion ?AI|Grok|Poe\b/i],
+  ['Google', /Google/i],
+  ['Apple', /Apple\.com|APPLE\.C|iTunes|App Store|iCloud/i],
+  ['Spotify', /Spotify/i],
   ['交通', /加油|中油|台塑石油|全國加油|悠遊卡|一卡通|台鐵|臺鐵|高鐵|捷運|客運|Uber|計程車|停車|ETC|遠通|機車|gogoro|iRent|YouBike/i],
   ['電話網路', /中華電信|台灣大哥大|遠傳|亞太電信|台灣之星|網路|電信/],
   ['水電瓦斯', /台灣電力|台電|自來水|瓦斯|天然氣/],

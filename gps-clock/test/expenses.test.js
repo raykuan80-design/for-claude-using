@@ -146,3 +146,9 @@ test('AI／Canva 訂閱自動分類', () => {
   assert.equal(guessCategory('CANVA* 04512345'), 'AI／Canva 訂閱');
   assert.equal(guessCategory('ANTHROPIC CLAUDE.AI'), 'AI／Canva 訂閱');
 });
+
+test('Google、Apple、Spotify 各自一類', () => {
+  assert.equal(guessCategory('GOOGLE *YouTube'), 'Google');
+  assert.equal(guessCategory('APPLE.COM/BILL CORK IE'), 'Apple');
+  assert.equal(guessCategory('Spotify P2A1B'), 'Spotify');
+});
