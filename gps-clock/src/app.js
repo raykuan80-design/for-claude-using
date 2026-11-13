@@ -1,0 +1,884 @@
+// 畫面與操作
+import * as store from './store.js?v=202611131618';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611131618';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611131618';
+import { nearestPlace } from './core/geo.js?v=202611131618';
+import { typeLabel } from './core/parse.js?v=202611131618';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611131618';
+import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611131618';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611131618';
+
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const state = {
+  tab: 'home',
+  month: monthOf(nowString()),
+  today: dateOf(nowString()),
+  gps: null, // { place, distance, inside }
+  undo: null, // { event, timer }
+  syncing: false,
+  lastSyncTry: 0,
+};
+
+// ---------- 共用 ----------
+function toast(msg, ms = 2600) {
+  const t = $('#toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, ms);
+}
+
+function placeNames() {
+  const names = store.getSettings().places.map((p) => p.name);
+  for (const e of store.allEvents()) if (!names.includes(e.place)) names.push(e.place);
+  return names;
+}
+
+function sessions() {
+  return pairSessions(store.allEvents(), store.getSettings().rules, nowString());
+}
+
+/** 課表（依文字快取解析結果） */
+function schedule() {
+  const text = store.getSettings().schedule || '';
+  if (schedule.text !== text) { schedule.text = text; schedule.val = parseSchedule(text); }
+  return schedule.val;
+}
+
+/** 依課表拆開後的時段：上課時間改算到上課地點 */
+function allocate(ss) {
+  const skip = new Set(store.getSettings().places.filter((p) => p.noCount).map((p) => p.name));
+  return applySchedule(ss, schedule(), skip, nowString());
+}
+
+/** 兩段式刪除：第一次點變成「確定刪除？」，4 秒內再點一次才執行 */
+function twoStep(btn, action) {
+  if (btn.classList.contains('confirm')) {
+    clearTimeout(btn._t);
+    btn.disabled = true;
+    action().catch((e) => { toast('失敗：' + e.message); btn.disabled = false; });
+    return;
+  }
+  const label = btn.textContent;
+  btn.classList.add('confirm');
+  btn.textContent = '確定刪除？';
+  btn._t = setTimeout(() => { btn.classList.remove('confirm'); btn.textContent = label; }, 4000);
+}
+
+function errMsg(e) {
+  if (e instanceof TypeError) return '連不上 GitHub，請檢查網路';
+  return e.message;
+}
+
+// ---------- 繪製 ----------
+function render() {
+  renderBanner();
+  $$('.month-label').forEach((el) => { el.textContent = state.month.replace('-', ' 年 ') + ' 月'; });
+  renderPunch();
+  const ss = sessions();
+  renderHome(ss);
+  renderDetail(ss);
+  renderEvents();
+  renderMoney(ss);
+  renderSettings();
+  renderHelp();
+}
+
+function renderBanner() {
+  const b = $('#banner');
+  const conn = store.getConn();
+  const n = store.outboxCount();
+  let html = '';
+  if (!conn) html = '還沒連上 GitHub。請先到「說明」照步驟建立 Token，再到「設定」填入。';
+  else if (n) html = `有 ${n} 筆打卡還沒上傳到 GitHub，連上網路後按「同步」。`;
+  b.hidden = !html;
+  b.innerHTML = html;
+  const s = store.syncedAt();
+  $('#syncBtn').textContent = state.syncing ? '同步中…' : s ? `同步 · ${hm(s)}` : '同步';
+}
+
+function renderPunch() {
+  const names = placeNames();
+  const sel = $('#punchPlace');
+  const prev = sel.value;
+  sel.innerHTML = names.length ? names.map((n) => `<option>${esc(n)}</option>`).join('') : '<option value="">（先到設定新增地點）</option>';
+  const working = sessions().filter((s) => s.status === 'working');
+  if (state.gps && state.gps.inside) sel.value = state.gps.place.name;
+  else if (working.length) sel.value = working[working.length - 1].place;
+  else if (prev && names.includes(prev)) sel.value = prev;
+
+  $('#punchStatus').innerHTML = working.length
+    ? working.map((s) => `${store.getSettings().places.some((p) => p.name === s.place && p.noCount) ? "在" : "上班中："}${esc(s.place)} ${hm(s.start)} 起（${formatDuration(s.seconds)}）`).join('<br>')
+    : '目前沒有上班';
+
+  const g = state.gps;
+  $('#gpsInfo').textContent = !g ? '' : g.inside
+    ? `📍 你在 ${g.place.name}（約 ${Math.round(g.distance)} 公尺）`
+    : `📍 離最近的 ${g.place.name} 約 ${g.distance >= 1000 ? (g.distance / 1000).toFixed(1) + ' 公里' : Math.round(g.distance) + ' 公尺'}`;
+}
+
+function renderHome(raw) {
+  const ss = allocate(raw);
+  const st = monthStats(ss, state.month, store.getSettings().places);
+  const kpi = (v, l, act) => `<div class="kpi${act ? ' clickable' : ''}"${act ? ` data-act="${act}" role="button"` : ''}><div class="v">${v}</div><div class="l">${l}${act ? ' ›' : ''}</div></div>`;
+  $('#kpis').innerHTML =
+    kpi(formatDuration(st.totalSec), '本月工時') +
+    kpi(st.days, '上班天數') +
+    kpi(formatDuration(st.avgSec), '平均每日') +
+    kpi(`<span class="${st.pending ? 'danger' : ''}">${st.pending}</span>`, '待補打卡', st.pending ? 'pending' : '') +
+    (st.classSec ? kpi(formatDuration(st.classSec), '其中上課') : '') +
+    (st.pay !== null ? kpi('$' + st.pay.toLocaleString(), '預估薪資') : '');
+  const ex = expenseStats(store.allExpenses(), store.getSettings().fixedExpenses, state.month);
+  if (ex.total) $('#kpis').innerHTML += kpi('$' + ex.total.toLocaleString(), '本月支出', 'money');
+
+  const pend = raw.filter((s) => s.date.startsWith(state.month) && isPending(s));
+  if (!pend.length) state.showPending = false;
+  $('#pendingList').hidden = !state.showPending;
+  $('#pendingList').innerHTML = pend.map((s) => {
+    const wd = WEEK[new Date(s.date + 'T00:00:00Z').getUTCDay()];
+    return `<div class="tip-row"><button class="link" data-day="${s.date}" type="button">${+s.date.slice(5, 7)}/${+s.date.slice(8)}（${wd}）</button>` +
+      `<span>${esc(s.place)}　${s.status === 'missingOut' ? `${hm(s.start)} 上班` : `${hm(s.end)} 下班`}</span>` +
+      `<button class="ghost small" data-fixkey="${fixKey(s)}" type="button">補${s.status === 'missingOut' ? '下班' : '上班'}</button></div>`;
+  }).join('');
+
+  $('#byPlace').innerHTML = st.byPlace.length
+    ? st.byPlace.map((p) => `<div class="place-row"><span><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)}</span>
+        <span>${formatDuration(p.seconds)}${p.perClass ? `（${p.classes} 堂）` : ''}${p.pay !== null ? ` · $${p.pay.toLocaleString()}` : ''}${p.noCount ? '<span class="tag">不算工時</span>' : ''}</span></div>`).join('')
+    : '<p class="muted">這個月還沒有工時。</p>';
+
+  const max = Math.max(4 * 3600, ...st.daily.map((d) => d.total));
+  // 預設選取：選過的那天（同月份）→ 今天（有工時）→ 本月最後一個有工時的日子
+  const worked = st.daily.filter((d) => d.total > 0);
+  if (!state.selDay || !state.selDay.startsWith(state.month)) {
+    state.selDay = worked.some((d) => d.date === state.today) ? state.today
+      : worked.length ? worked[worked.length - 1].date : null;
+  }
+  $('#chart').innerHTML = `<div class="bars-wrap"><div class="bars">${st.daily.map((d) => {
+    const segs = Object.entries(d.byPlace).map(([p, sec]) =>
+      `<div class="seg" style="height:${(sec / max) * 100}%;background:${store.colorOf(p)}"></div>`).join('');
+    const val = d.total ? `<span class="val">${Math.round(d.total / 360) / 10}</span>` : '';
+    const cls = ['bar', d.date === state.today && 'today', d.date === state.selDay && 'sel'].filter(Boolean).join(' ');
+    return `<div class="${cls}" data-date="${d.date}">${segs}${val}<span class="day">${+d.date.slice(8)}</span></div>`;
+  }).join('')}</div></div><div class="tip" id="chartTip"></div>`;
+  renderDayTip(ss, st);
+  // 一個月 31 根長條放不下時可左右滑；預設捲到選取的那天
+  const wrap = $('#chart .bars-wrap'), selBar = $('#chart .bar.sel');
+  if (state.chartScroll && state.chartScroll.key === state.month + state.selDay) wrap.scrollLeft = state.chartScroll.left; // 重畫時保留滑到的位置
+  else if (selBar && wrap.scrollWidth > wrap.clientWidth) wrap.scrollLeft = selBar.offsetLeft - wrap.clientWidth / 2 + selBar.offsetWidth / 2;
+  state.chartScroll = { key: state.month + state.selDay, left: wrap.scrollLeft };
+  wrap.addEventListener('scroll', () => { state.chartScroll.left = wrap.scrollLeft; }, { passive: true });
+}
+
+const WEEK = '日一二三四五六';
+/** 時段的識別字串（重算後仍對得上） */
+const fixKey = (s) => `${s.place}|${s.start || ''}|${s.end || ''}`;
+function renderDayTip(ss, st) {
+  const tip = $('#chartTip');
+  const date = state.selDay;
+  if (!date) { tip.innerHTML = '<span class="muted">點長條看當天上了幾小時</span>'; return; }
+  const d = st.daily.find((x) => x.date === date);
+  const wd = WEEK[new Date(date + 'T00:00:00Z').getUTCDay()];
+  const list = ss.filter((s) => s.date === date);
+  const head = `<div class="tip-head"><b>${+date.slice(5, 7)}/${+date.slice(8)}（${wd}）</b>` +
+    (d && d.total ? `<span>共 <b>${formatDuration(d.total)}</b>（${hours(d.total)} 小時）</span>` : '<span class="muted">沒有工時</span>') + '</div>';
+  const rows = list.map((s) => `<div class="tip-row"><span><span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}${s.course ? ` <b>${esc(s.course)}</b>${s.price != null ? ` $${s.price.toLocaleString()}` : ''}${s.fromSchedule ? '<span class="tag">照課表</span>' : ''}` : ''}　${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : (s.status === 'working' ? '現在' : '--:--')}</span>` +
+    `<span>${counts(s) ? formatDuration(s.seconds) : isPending(s)
+      ? `<button class="ghost small danger" data-fixkey="${fixKey(s)}" type="button">${STATUS_LABEL[s.status]}・補打卡</button>`
+      : `<span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>`}</span></div>`).join('');
+  const miss = uncoveredClasses(schedule(), date, list).map((c) =>
+    `<div class="tip-row miss"><span>${esc(c.place)} ${esc(c.course)}　${hm(c.start)} – ${hm(c.end)}</span><span>沒在打卡時間內</span></div>`).join('');
+  tip.innerHTML = head + rows + miss;
+}
+
+function renderDetail(ss) {
+  const only = $('#onlyPending').checked;
+  const pieces = allocate(ss).filter((p) => p.course);
+  const list = [...ss.filter((s) => s.date.startsWith(state.month) && (!only || isPending(s))),
+    ...(only ? [] : pieces.filter((p) => p.fromSchedule && p.date.startsWith(state.month)))]
+    .sort((a, b) => ((a.start || a.end) < (b.start || b.end) ? -1 : 1));
+  $('#noSessions').hidden = list.length > 0;
+  $('#sessionRows').innerHTML = list.map((s) => {
+    if (s.fromSchedule) {
+      return `<tr class="sched-row">
+      <td data-k="date">${s.date.slice(5)} <span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}</td>
+      <td data-k="status"><span class="tag">照課表</span></td>
+      <td data-k="time">${hm(s.start)} – ${hm(s.end)}<div class="classes">${esc(s.course)}${s.price != null ? ` $${s.price.toLocaleString()}` : ''}（沒打卡，照課表算）</div></td>
+      <td data-k="hours">${formatDuration(s.seconds)}</td>
+      <td data-k="fix"></td></tr>`;
+    }
+    const idx = ss.indexOf(s);
+    const cls = pieces.filter((p) => p.origin === s).map((p) =>
+      `<div class="class-line"><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)} ${esc(p.course)}${p.price != null ? ` $${p.price.toLocaleString()}` : ''} ${hm(p.start)}–${p.end ? hm(p.end) : '現在'}（${formatDuration(p.seconds)}）</div>`).join('');
+    const fix = isPending(s) ? `<button class="ghost small" data-fix="${idx}" type="button">補打卡</button>` : '';
+    return `<tr>
+      <td data-k="date">${s.date.slice(5)} <span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}</td>
+      <td data-k="status"><span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>${s.manual ? '<span class="tag">手動</span>' : ''}</td>
+      <td data-k="time">${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : '--:--'}${s.end && s.start && dateOf(s.end) !== s.date ? '（隔天）' : ''}${cls ? `<div class="classes">上課：${cls}</div>` : ''}</td>
+      <td data-k="hours">${counts(s) ? formatDuration(s.seconds) : ''}</td>
+      <td data-k="fix">${fix}</td></tr>`;
+  }).join('');
+  // 寬螢幕時用完整欄位
+  $('.sessions thead').innerHTML = '<tr><th>日期／地點</th><th>狀態</th><th>上班 – 下班</th><th>時數</th><th></th></tr>';
+}
+
+function renderEvents() {
+  const names = placeNames();
+  $$('.place-select').forEach((sel) => {
+    const v = sel.value;
+    sel.innerHTML = names.map((n) => `<option>${esc(n)}</option>`).join('');
+    if (names.includes(v)) sel.value = v;
+  });
+  const list = store.allEvents().filter((e) => e.time.startsWith(state.month)).sort((a, b) => (a.time < b.time ? 1 : -1));
+  $('#eventList').innerHTML = list.length ? list.map((e, i) => `<li>
+      <span>${e.time.slice(5, 16)} <b>${typeLabel(e.type)}</b> ${esc(e.place)}${e.manual ? '<span class="tag">手動</span>' : ''}${e.pending ? '<span class="tag">未上傳</span>' : ''}</span>
+      <button class="ghost small danger" data-del="${i}" type="button">刪除</button></li>`).join('')
+    : '<li class="empty">這個月沒有打卡紀錄。</li>';
+  $('#eventList')._list = list;
+  const errs = store.parseErrors();
+  $('#parseErrors').innerHTML = errs.length ? '<p>無法辨識的檔案（例如測試時送出的空白打卡）：</p><ul class="event-list">' + errs.map((e, i) =>
+    `<li><span>${esc(e.path.replace('punches/', ''))}：${esc(e.text) || '（空白）'}（${e.error}）</span><button class="ghost small danger" data-delfile="${i}" type="button">刪除</button></li>`).join('') + '</ul>' : '';
+  $('#parseErrors')._errs = errs;
+}
+
+const money = (n) => (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString();
+
+/** 類別建議：用過的（次數多的在前）＋預設 */
+function categories() {
+  const cnt = new Map();
+  for (const x of store.allExpenses()) cnt.set(x.category, (cnt.get(x.category) || 0) + 1);
+  const used = [...cnt].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  return [...new Set([...used, ...DEFAULT_CATEGORIES])];
+}
+
+function renderMoney(ss) {
+  const settings = store.getSettings();
+  const ex = expenseStats(store.allExpenses(), settings.fixedExpenses, state.month);
+  const income = monthStats(allocate(ss), state.month, settings.places).pay;
+  const kpi = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#moneyKpis').innerHTML =
+    kpi(money(ex.total), '本月支出') +
+    kpi(income !== null ? money(income) : '—', '預估收入（薪資）') +
+    (income !== null ? kpi(`<span class="${income - ex.total < 0 ? 'danger' : 'ok'}">${money(income - ex.total)}</span>`, '結餘') : '') +
+    kpi(money(ex.fixed), '其中固定支出');
+
+  const cats = categories();
+  $('#expCats').innerHTML = cats.map((c) => `<option value="${esc(c)}">`).join('');
+  $('#catChips').innerHTML = cats.slice(0, 10).map((c) => `<button type="button" class="chip" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  const f = $('#expForm').elements;
+  if (!f.date.value) f.date.value = state.month === monthOf(state.today) ? state.today : `${state.month}-01`;
+  $$('#catChips .chip').forEach((b) => b.classList.toggle('on', b.dataset.cat === f.category.value));
+  const ff = $('#fixedForm').elements;
+  if (!ff.from.value) ff.from.value = state.month;
+
+  const max = Math.max(1, ...ex.byCategory.map((c) => c.amount));
+  $('#expByCat').innerHTML = ex.byCategory.length ? ex.byCategory.map((c) => `<div class="cat-row">
+      <span class="cat-name">${esc(c.category)}</span>
+      <span class="cat-bar"><span style="width:${(c.amount / max) * 100}%"></span></span>
+      <span class="cat-amt">${money(c.amount)}<span class="muted small-text"> ${Math.round((c.amount / ex.total) * 100)}%</span></span></div>`).join('')
+    : '<p class="muted">這個月還沒有支出。</p>';
+
+  const srcTag = (x) => !x.src ? '' : '<span class="tag">' + ({ inv: '發票', pay: 'Apple Pay' }[x.src.split(':')[0]] || '刷卡') + '</span>';
+  $('#expList').innerHTML = ex.items.length ? ex.items.map((x) => `<li class="${state.editExp === x.id ? 'editing' : ''}">
+      <button class="exp-item" data-edit="${esc(x.id)}" type="button"><span class="muted">${+x.date.slice(5, 7)}/${+x.date.slice(8)}</span> <b>${esc(x.category)}</b> ${esc(x.note)}${srcTag(x)}</button>
+      <span class="exp-amt">${money(x.amount)}</span>
+      <button class="ghost small danger" data-delexp="${esc(x.id)}" type="button">刪除</button></li>`).join('')
+    : '<li class="empty">這個月還沒有記帳。</li>';
+
+  const fixed = settings.fixedExpenses || [];
+  const active = fixed.filter((x) => !x.to || x.to >= state.month);
+  $('#fixedList').innerHTML = active.length ? active.map((x) => `<li>
+      <span><b>${esc(x.name)}</b> <span class="muted small-text">${esc(x.category)} · ${x.from.replace('-', '/')} 起${x.from > state.month ? '（還沒開始）' : ''}</span></span>
+      <span class="exp-amt">${money(x.amount)}</span>
+      <button class="ghost small danger" data-delfixed="${esc(x.id)}" type="button">刪除</button></li>`).join('')
+    : '<li class="empty">還沒有固定支出。</li>';
+  const bad = store.inboxBad();
+  $('#inboxBad').hidden = !bad.length;
+  $('#inboxBad').innerHTML = bad.length ? `<p class="small-text">Apple Pay 捷徑寫入的這幾筆看不懂（要是「金額,商家」）：</p>` + bad.map((x, i) =>
+    `<div class="tip-row"><span>${esc(x.path.split('/').pop())}：${esc(x.text) || '（空白）'}</span><button class="ghost small danger" data-delinbox="${i}" type="button">刪除</button></div>`).join('') : '';
+  renderImportPreview();
+}
+
+/** 匯入預覽：每筆可勾選、改類別 */
+function renderImportPreview() {
+  const box = $('#expImportPreview');
+  const imp = state.imp;
+  if (!imp) { box.innerHTML = ''; return; }
+  const cats = categories();
+  const label = { new: '', dup: '<span class="tag">已匯入過</span>', maybe: '<span class="tag warn">可能重複</span>' };
+  const n = imp.items.filter((x) => x.on).length;
+  const sum = imp.items.filter((x) => x.on).reduce((a, x) => a + x.amount, 0);
+  box.innerHTML = `<p class="small-text">讀到 ${imp.kind} ${imp.items.length} 筆${imp.errors.length ? `，${imp.errors.length} 行看不懂已略過` : ''}。勾選要匯入的：</p>
+    <ul class="event-list imp-list">${imp.items.map((x, i) => `<li class="${x.status}">
+      <label class="check"><input type="checkbox" data-imp="${i}"${x.on ? ' checked' : ''}${x.status === 'dup' ? ' disabled' : ''}>
+        <span>${x.date.slice(5).replace('-', '/')} ${esc(x.note)}${label[x.status]}${x.twin ? `<span class="muted small-text">（已有 ${x.twin.date.slice(5).replace('-', '/')} ${esc(x.twin.note || x.twin.category)}）</span>` : ''}</span></label>
+      <select data-impcat="${i}">${[...new Set([x.category, ...cats])].map((c) => `<option${c === x.category ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      <span class="exp-amt">${money(x.amount)}</span></li>`).join('')}</ul>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="impGo" type="button"${n ? '' : ' disabled'}>匯入勾選的 ${n} 筆（${money(sum)}）</button>
+      <button class="ghost" id="impCancel" type="button">取消</button>
+    </div>`;
+}
+
+function resetExpForm() {
+  state.editExp = null;
+  const form = $('#expForm');
+  const keepDate = form.elements.date.value;
+  form.reset();
+  form.elements.date.value = keepDate;
+  $('#expFormTitle').textContent = '記一筆';
+  $('#expForm button[type=submit]').textContent = '新增';
+  $('#expCancel').hidden = true;
+}
+
+function renderSettings() {
+  const c = store.getConn();
+  const f = $('#connForm').elements;
+  if (c && !$('#connForm').contains(document.activeElement)) {
+    f.owner.value = c.owner; f.repo.value = c.repo; f.branch.value = c.branch || ''; f.token.value = c.token;
+  }
+  const sf = $('#scheduleForm');
+  if (!sf.contains(document.activeElement)) sf.elements.schedule.value = store.getSettings().schedule || '';
+  renderScheduleInfo();
+  const r = store.getSettings().rules;
+  const rf = $('#rulesForm').elements;
+  if (!$('#rulesForm').contains(document.activeElement)) {
+    rf.mergeGapMinutes.value = r.mergeGapMinutes; rf.minSessionMinutes.value = r.minSessionMinutes;
+  }
+  if (!$('#placeList').contains(document.activeElement)) renderPlaces();
+}
+
+function renderPlaces() {
+  const configured = store.getSettings().places;
+  const extra = placeNames().filter((n) => !configured.some((p) => p.name === n)).map((name) => ({ name, unsaved: true }));
+  const all = [...configured, ...extra];
+  $('#placeList').innerHTML = all.length ? all.map((p, i) => `<form class="place-edit" data-i="${i}">
+      <label class="field full">名稱${p.unsaved ? '（紀錄裡出現，還沒儲存）' : ''}<input name="pname" value="${esc(p.name)}" required></label>
+      <label class="field">薪資（選填）<input name="wage" type="number" min="0" inputmode="numeric" value="${p.wage ?? ''}"></label>
+      <label class="field">薪資算法<select name="payUnit"><option value="hour">每小時</option><option value="class"${p.payUnit === 'class' ? ' selected' : ''}>每堂課</option></select></label>
+      <label class="field">顏色<input name="color" type="color" value="${p.color || store.PALETTE[i % store.PALETTE.length]}"></label>
+      <label class="field">緯度<input name="lat" type="number" step="any" inputmode="decimal" value="${p.lat ?? ''}"></label>
+      <label class="field">經度<input name="lng" type="number" step="any" inputmode="decimal" value="${p.lng ?? ''}"></label>
+      <label class="field">範圍（公尺）<input name="radius" type="number" min="20" value="${p.radius ?? 150}"></label>
+      <label class="check full"><input type="checkbox" name="noCount"${p.noCount ? ' checked' : ''}> 不算工時（只記錄時間，例如家裡）</label>
+      <button class="ghost small" data-here type="button">用目前位置</button>
+      <button class="primary" type="submit">儲存</button>
+      <button class="ghost small danger" data-rm type="button">刪除地點</button>
+    </form>`).join('') : '<p class="muted">還沒有地點。</p>';
+  $('#placeList')._all = all;
+}
+
+function renderScheduleInfo(text) {
+  const sch = text === undefined ? schedule() : parseSchedule(text);
+  const n = sch.weekly.length + sch.extras.length;
+  const today = classesOn(sch, state.today);
+  $('#scheduleInfo').innerHTML = !n && !sch.errors.length ? '<span class="muted">還沒有課表。</span>'
+    : `每週固定 ${sch.weekly.length} 堂${sch.extras.length ? `、另外補／加課 ${sch.extras.length} 堂` : ''}${sch.cancels.size ? `、停課 ${sch.cancels.size} 天` : ''}${sch.from ? `（${sch.from.slice(5)} ～ ${sch.to.slice(5)}）` : ''}。` +
+      `今天：${today.length ? today.map((c) => `${esc(c.place)} ${esc(c.course)} ${hm(c.start)}–${hm(c.end)}`).join('、') : '沒有課'}` +
+      (sch.errors.length ? `<ul class="errs">${sch.errors.map((e) => `<li>第 ${e.line} 行「${esc(e.text)}」：${e.error}</li>`).join('')}</ul>` : '');
+}
+
+function renderHelp() {
+  const c = store.getConn();
+  const url = `https://api.github.com/repos/${c ? c.owner : '你的帳號'}/${c ? c.repo : 'gps-clock-data'}/contents/punches/[格式化的日期].csv`;
+  $('#shortcutUrl').textContent = url;
+  $('#copyUrl').dataset.copy = url.replace('[格式化的日期].csv', '');
+  const pay = url.replace('punches/[格式化的日期].csv', 'expenses/inbox/');
+  $('#payUrl').textContent = pay + '[格式化的日期].csv';
+  $('#copyPayUrl').dataset.copy = pay;
+}
+
+// ---------- 同步 ----------
+async function doSync({ quiet = false } = {}) {
+  if (!store.getConn() || state.syncing) return;
+  state.syncing = true; state.lastSyncTry = Date.now(); renderBanner();
+  try {
+    const r = await store.sync();
+    if (!quiet || r.absorbed) toast(`已同步${r.added ? `，新增 ${r.added} 筆` : ''}${r.uploaded ? `，補傳 ${r.uploaded} 筆` : ''}${r.absorbed ? `，Apple Pay 記了 ${r.absorbed} 筆支出` : ''}`);
+  } catch (e) {
+    if (!quiet || !(e instanceof TypeError)) toast('同步失敗：' + errMsg(e), 4000);
+  } finally {
+    state.syncing = false;
+    render();
+  }
+}
+
+// ---------- GPS ----------
+function locate() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('這個瀏覽器不支援定位'));
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+      (e) => reject(new Error(e.code === 1 ? '沒有定位權限，請到 設定 › Safari › 位置 允許' : '定位失敗')),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  });
+}
+
+async function updateGps() {
+  const places = store.getSettings().places;
+  if (!places.some((p) => typeof p.lat === 'number')) return;
+  try {
+    state.gps = nearestPlace(await locate(), places);
+  } catch { state.gps = null; }
+  renderPunch();
+}
+
+// ---------- 打卡 ----------
+async function punch(type) {
+  const place = $('#punchPlace').value;
+  if (!place) { toast('先到「設定」新增地點'); return; }
+  if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+  const ev = { time: nowString(), type, place, manual: true };
+  $$('#inBtn, #outBtn').forEach((b) => { b.disabled = true; });
+  try {
+    const r = await store.addEvent(ev);
+    if (r.duplicate) { toast('這一秒已經打過了'); return; }
+    toast(`${typeLabel(type)}打卡 ${hm(ev.time)}${r.queued ? '（沒網路，先存在手機）' : ''}`);
+    clearTimeout(state.undo && state.undo.timer);
+    state.undo = { event: ev, timer: setTimeout(() => { state.undo = null; $('#undoRow').hidden = true; }, 30000) };
+    $('#undoText').textContent = `已${typeLabel(type)}打卡 ${hm(ev.time)} · ${place}`;
+    $('#undoRow').hidden = false;
+  } catch (e) {
+    toast('打卡失敗：' + errMsg(e), 4000);
+  } finally {
+    $$('#inBtn, #outBtn').forEach((b) => { b.disabled = false; });
+    render();
+  }
+}
+
+async function undo() {
+  if (!state.undo) return;
+  const target = state.undo.event;
+  const ev = store.allEvents().find((e) => e.time === target.time && e.type === target.type && e.place === target.place);
+  clearTimeout(state.undo.timer); state.undo = null; $('#undoRow').hidden = true;
+  if (!ev) return;
+  try { await store.deleteEvent(ev); toast('已復原'); } catch (e) { toast('復原失敗：' + errMsg(e)); }
+  render();
+}
+
+// ---------- 事件綁定 ----------
+function bind() {
+  $('#tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    state.tab = b.dataset.tab;
+    $$('#tabs button').forEach((x) => x.classList.toggle('active', x === b));
+    $$('.tab').forEach((s) => { s.hidden = s.id !== 'tab-' + state.tab; });
+    if (state.tab === 'home') updateGps();
+    window.scrollTo(0, 0);
+  });
+
+  document.addEventListener('click', (e) => {
+    const m = e.target.closest('[data-month]');
+    if (m) { state.month = shiftMonth(state.month, +m.dataset.month); render(); return; }
+    const c = e.target.closest('[data-copy]');
+    if (c) {
+      navigator.clipboard.writeText(c.dataset.copy).then(() => toast('已複製'), () => toast('無法複製，請長按文字複製'));
+    }
+  });
+
+  $('#syncBtn').addEventListener('click', () => doSync());
+  $('#inBtn').addEventListener('click', () => punch('in'));
+  $('#outBtn').addEventListener('click', () => punch('out'));
+  $('#undoBtn').addEventListener('click', undo);
+
+  // 手機上只在「點」的時候切換（滑動圖表時不要亂跳）；電腦滑鼠移過去就顯示
+  const pickDay = (bar) => {
+    if (!bar || bar.dataset.date === state.selDay) return;
+    state.selDay = bar.dataset.date;
+    $$('#chart .bar').forEach((b) => b.classList.toggle('sel', b === bar));
+    const ss = allocate(sessions());
+    renderDayTip(ss, monthStats(ss, state.month, store.getSettings().places));
+  };
+  $('#chart').addEventListener('click', (e) => pickDay(e.target.closest('.bar')));
+  $('#chart').addEventListener('pointerover', (e) => { if (e.pointerType === 'mouse') pickDay(e.target.closest('.bar')); });
+
+  $('#onlyPending').addEventListener('change', () => renderDetail(sessions()));
+  $('#exportBtn').addEventListener('click', () => {
+    const blob = new Blob([sessionsCsv(allocate(sessions()), state.month)], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `工時明細-${state.month}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  // 補打卡
+  $('#sessionRows').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fix]');
+    if (b) openFix(sessions()[+b.dataset.fix]);
+  });
+  // 總覽：點「待補打卡」展開清單；清單和長條圖說明裡的按鈕可以直接補
+  $('#tab-home').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="money"]')) { $('#tabs [data-tab=money]').click(); return; }
+    const k = e.target.closest('[data-act="pending"]');
+    if (k) { state.showPending = !state.showPending; $('#pendingList').hidden = !state.showPending; return; }
+    const day = e.target.closest('[data-day]');
+    if (day) {
+      state.selDay = day.dataset.day; state.chartScroll = null; render();
+      $('#chart').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    const fb = e.target.closest('[data-fixkey]');
+    if (fb) openFix(sessions().find((s) => fixKey(s) === fb.dataset.fixkey));
+  });
+  function openFix(s) {
+    if (!s) return;
+    const f = $('#fixForm').elements;
+    const kind = s.status === 'missingIn' ? 'in' : 'out';
+    f.place.value = s.place;
+    f.kind.value = kind;
+    f.date.value = s.date;
+    f.clock.value = kind === 'out' ? (s.lastOut ? s.lastOut.slice(11) : '') : '';
+    $('#fixHint').textContent = s.status === 'missingOut'
+      ? `上班 ${hm(s.start)}，缺下班。${s.lastOut ? `GPS 原本記到 ${hm(s.lastOut)} 下班，已預先填入。` : ''}`
+      : `下班 ${hm(s.end)}，缺上班。`;
+    $('#fixDialog').showModal();
+  }
+  $('#fixForm').addEventListener('submit', async (e) => {
+    if (e.submitter && e.submitter.value === 'cancel') return;
+    const f = e.target.elements;
+    const time = `${f.date.value} ${f.clock.value.length === 5 ? f.clock.value + ':00' : f.clock.value}`;
+    if (!isValid(time)) { e.preventDefault(); toast('時間格式不對'); return; }
+    try {
+      const r = await store.addEvent({ time, type: f.kind.value, place: f.place.value, manual: true });
+      toast(r.duplicate ? '已經有這筆了' : '已補上');
+    } catch (err) { toast('失敗：' + errMsg(err)); }
+    render();
+  });
+
+  // 紀錄分頁
+  $('#addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target.elements;
+    const time = `${f.date.value} ${f.clock.value.length === 5 ? f.clock.value + ':00' : f.clock.value}`;
+    if (!isValid(time)) { toast('時間格式不對'); return; }
+    if (!f.place.value) { toast('先到「設定」新增地點'); return; }
+    try {
+      const r = await store.addEvent({ time, type: f.kind.value, place: f.place.value, manual: true });
+      toast(r.duplicate ? '已經有這筆了' : r.queued ? '沒網路，先存在手機' : '已新增');
+    } catch (err) { toast('失敗：' + errMsg(err)); }
+    render();
+  });
+  $('#eventList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-del]');
+    if (!b) return;
+    const ev = $('#eventList')._list[+b.dataset.del];
+    twoStep(b, async () => { await store.deleteEvent(ev); toast('已刪除'); render(); });
+  });
+  $('#parseErrors').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delfile]');
+    if (!b) return;
+    const err = $('#parseErrors')._errs[+b.dataset.delfile];
+    twoStep(b, async () => { await store.deleteFile(err.path); toast('已刪除'); render(); });
+  });
+  const doImport = async (text) => {
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    try {
+      const r = await store.importText(text);
+      $('#importResult').innerHTML = `新增 ${r.added} 筆，略過 ${r.skipped} 筆重複` +
+        (r.errors.length ? `，${r.errors.length} 行無法辨識：<br>` + r.errors.map((x) => `第 ${x.line} 行：${esc(x.text)}（${x.error}）`).join('<br>') : '');
+      $('#importText').value = '';
+    } catch (err) { toast('匯入失敗：' + errMsg(err)); }
+    render();
+  };
+  $('#importBtn').addEventListener('click', () => doImport($('#importText').value));
+  $('#importFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (file) await doImport(await file.text());
+    e.target.value = '';
+  });
+
+  // 支出分頁
+  $('#catChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cat]');
+    if (!b) return;
+    $('#expForm').elements.category.value = b.dataset.cat;
+    $$('#catChips .chip').forEach((x) => x.classList.toggle('on', x === b));
+  });
+  $('#expForm').elements.category.addEventListener('input', (e) =>
+    $$('#catChips .chip').forEach((x) => x.classList.toggle('on', x.dataset.cat === e.target.value)));
+  $('#expForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const f = e.target.elements;
+    const prev = state.editExp && store.allExpenses().find((x) => x.id === state.editExp);
+    let item;
+    try {
+      item = cleanExpense({ id: state.editExp || undefined, src: prev && prev.src, date: f.date.value, amount: f.amount.value, category: f.category.value, note: f.note.value });
+    } catch (err) { toast(err.message); return; }
+    const btn = $('#expForm button[type=submit]');
+    btn.disabled = true;
+    try {
+      await store.saveExpense(item);
+      toast(prev ? '已修改' : `已記下 ${item.category} $${item.amount.toLocaleString()}`);
+      if (item.date.slice(0, 7) !== state.month) state.month = item.date.slice(0, 7);
+      resetExpForm();
+    } catch (err) { toast('儲存失敗：' + errMsg(err), 4000); }
+    btn.disabled = false;
+    render();
+  });
+  $('#expCancel').addEventListener('click', () => { resetExpForm(); render(); });
+  $('#expList').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) {
+      const x = store.allExpenses().find((i) => i.id === ed.dataset.edit);
+      if (!x) return;
+      state.editExp = x.id;
+      const f = $('#expForm').elements;
+      f.date.value = x.date; f.amount.value = x.amount; f.category.value = x.category; f.note.value = x.note || '';
+      $('#expFormTitle').textContent = '修改這筆';
+      $('#expForm button[type=submit]').textContent = '儲存';
+      $('#expCancel').hidden = false;
+      render();
+      $('#expForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const del = e.target.closest('[data-delexp]');
+    if (del) {
+      const x = store.allExpenses().find((i) => i.id === del.dataset.delexp);
+      if (x) twoStep(del, async () => { await store.deleteExpense(x); if (state.editExp === x.id) resetExpForm(); toast('已刪除'); render(); });
+    }
+  });
+  $('#expExportBtn').addEventListener('click', () => {
+    const blob = new Blob([expensesCsv(store.allExpenses(), store.getSettings().fixedExpenses, state.month)], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `支出-${state.month}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  $('#inboxBad').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delinbox]');
+    if (!b) return;
+    const item = store.inboxBad()[+b.dataset.delinbox];
+    twoStep(b, async () => { await store.deleteInboxFile(item); toast('已刪除'); render(); });
+  });
+  $('[data-goto-help]').addEventListener('click', (e) => {
+    e.preventDefault();
+    $('#tabs [data-tab=help]').click();
+    $('#help-pay').scrollIntoView();
+  });
+
+  // 匯入發票／信用卡
+  const readImport = (text) => {
+    const r = parseImport(text);
+    if (!r.items.length) { toast(r.errors.length ? '看不懂這個檔案：找不到日期和金額' : '沒有可以匯入的消費'); return; }
+    const marked = markImport(r.items, store.allExpenses());
+    state.imp = { kind: r.kind, errors: r.errors, items: marked.map((x) => ({ ...x, on: x.status === 'new' })) };
+    renderImportPreview();
+  };
+  $('#expImportBtn').addEventListener('click', () => readImport($('#expImportText').value));
+  $('#expImportFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder('utf-8').decode(buf);
+    if (text.includes('\uFFFD')) { try { text = new TextDecoder('big5').decode(buf); } catch { /* 沒有 big5 就用 utf-8 */ } } // 銀行常用 Big5
+    readImport(text);
+  });
+  $('#expImportPreview').addEventListener('change', (e) => {
+    const cb = e.target.closest('[data-imp]');
+    if (cb) { state.imp.items[+cb.dataset.imp].on = cb.checked; renderImportPreview(); return; }
+    const sel = e.target.closest('[data-impcat]');
+    if (sel) state.imp.items[+sel.dataset.impcat].category = sel.value;
+  });
+  $('#expImportPreview').addEventListener('click', async (e) => {
+    if (e.target.closest('#impCancel')) { state.imp = null; renderImportPreview(); return; }
+    const go = e.target.closest('#impGo');
+    if (!go) return;
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const list = state.imp.items.filter((x) => x.on).map(({ date, amount, category, note, src }) => cleanExpense({ date, amount, category, note, src }));
+    go.disabled = true; go.textContent = '匯入中…';
+    try {
+      const n = await store.addExpenses(list);
+      state.imp = null; $('#expImportText').value = '';
+      toast(`已匯入 ${n} 筆`);
+      const months = [...new Set(list.map((x) => x.date.slice(0, 7)))].sort();
+      if (months.length && !months.includes(state.month)) state.month = months[months.length - 1];
+    } catch (err) { toast('匯入失敗：' + errMsg(err), 4000); go.disabled = false; }
+    render();
+  });
+
+  $('#fixedForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const f = e.target.elements;
+    const amount = Math.round(Number(f.amount.value));
+    if (!(amount > 0)) { toast('金額要大於 0'); return; }
+    const name = f.name.value.trim();
+    const item = { id: newId(), name, amount, category: f.category.value.trim() || name || '其他', from: f.from.value };
+    const s = store.getSettings();
+    try {
+      await store.saveSettings({ ...s, fixedExpenses: [...(s.fixedExpenses || []), item] });
+      toast(`已加入固定支出：${name}`);
+      e.target.reset();
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    render();
+  });
+  $('#fixedList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delfixed]');
+    if (!b) return;
+    twoStep(b, async () => {
+      const s = store.getSettings();
+      const prev = shiftMonth(state.month, -1);
+      // 還沒開始過的直接刪掉；用過的只是從這個月起停止，以前的月份照算
+      const list = (s.fixedExpenses || []).flatMap((x) => x.id !== b.dataset.delfixed ? [x]
+        : x.from >= state.month ? [] : [{ ...x, to: prev }]);
+      await store.saveSettings({ ...s, fixedExpenses: list });
+      toast(`已刪除，${state.month.replace('-', '/')} 起不再計入`);
+      render();
+    });
+  });
+
+  // 設定分頁
+  $('#connForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target.elements;
+    const conn = { owner: f.owner.value.trim(), repo: f.repo.value.trim(), branch: f.branch.value.trim(), token: f.token.value.trim() };
+    const out = $('#connResult');
+    out.textContent = '連線中…';
+    try {
+      const { GitHub } = await import('./github.js');
+      const info = await new GitHub(conn).info();
+      if (!info.canWrite) throw new Error('Token 沒有寫入權限（Contents 要選 Read and write）');
+      const old = store.getConn();
+      if (!old || old.owner !== conn.owner || old.repo !== conn.repo || old.branch !== conn.branch) store.clearLocal();
+      store.setConn(conn);
+      out.innerHTML = info.private ? '<span style="color:var(--ok)">已連線 ✓</span>'
+        : '<span class="danger">已連線，但這個存放庫是公開的，別人看得到你的打卡紀錄。建議到 GitHub 改成 Private。</span>';
+      await doSync();
+    } catch (err) {
+      out.innerHTML = `<span class="danger">${esc(errMsg(err))}</span>`;
+    }
+  });
+  $('#disconnectBtn').addEventListener('click', (e) => twoStep(e.currentTarget, async () => {
+    store.setConn(null); store.clearLocal(); $('#connForm').reset(); $('#connResult').textContent = '已登出，手機上的資料已清除';
+    e.currentTarget.disabled = false; e.currentTarget.classList.remove('confirm'); e.currentTarget.textContent = '登出';
+    render();
+  }));
+
+  $('#scheduleForm').elements.schedule.addEventListener('input', (e) => renderScheduleInfo(e.target.value));
+  $('#scheduleForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = e.target.elements.schedule.value.replace(/\s+$/, '');
+    const bad = parseSchedule(text).errors.length;
+    try {
+      await store.saveSettings({ ...store.getSettings(), schedule: text });
+      toast(bad ? `已儲存，但有 ${bad} 行看不懂，那幾行不會套用` : '課表已儲存');
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    document.activeElement.blur(); render();
+  });
+
+  $('#rulesForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target.elements;
+    const s = store.getSettings();
+    try {
+      await store.saveSettings({ ...s, rules: { mergeGapMinutes: +f.mergeGapMinutes.value, minSessionMinutes: +f.minSessionMinutes.value } });
+      toast('已儲存');
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    document.activeElement.blur(); render();
+  });
+
+  $('#addPlaceBtn').addEventListener('click', () => {
+    const list = $('#placeList');
+    if (list._all.some((p) => p.isNew)) return;
+    list._all.push({ name: '', isNew: true });
+    const all = list._all;
+    renderPlacesFrom(all);
+    const forms = $$('.place-edit');
+    forms[forms.length - 1].elements.pname.focus();
+  });
+  function renderPlacesFrom(all) {
+    const saved = store.getSettings().places;
+    store.getSettings().places = all; // 暫時借用 renderPlaces 的版型
+    renderPlaces();
+    store.getSettings().places = saved;
+    $('#placeList')._all = all;
+  }
+
+  $('#placeList').addEventListener('click', async (e) => {
+    const form = e.target.closest('.place-edit');
+    if (!form) return;
+    if (e.target.closest('[data-here]')) {
+      const b = e.target.closest('[data-here]');
+      b.textContent = '定位中…';
+      try {
+        const p = await locate();
+        form.elements.lat.value = p.lat.toFixed(6);
+        form.elements.lng.value = p.lng.toFixed(6);
+        toast(`已填入目前位置（誤差約 ${Math.round(p.accuracy)} 公尺），記得按儲存`);
+      } catch (err) { toast(err.message, 4000); }
+      b.textContent = '用目前位置';
+    }
+    if (e.target.closest('[data-rm]')) {
+      const i = +form.dataset.i;
+      const item = $('#placeList')._all[i];
+      twoStep(e.target.closest('[data-rm]'), async () => {
+        const s = store.getSettings();
+        if (!item.unsaved && !item.isNew) await store.saveSettings({ ...s, places: s.places.filter((p) => p.name !== item.name) });
+        document.activeElement.blur(); renderPlaces(); render();
+      });
+    }
+  });
+  $('#placeList').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const f = form.elements;
+    const i = +form.dataset.i;
+    const all = $('#placeList')._all;
+    const old = all[i];
+    const num = (v) => (v === '' ? undefined : Number(v));
+    const place = {
+      name: f.pname.value.trim(), wage: num(f.wage.value), color: f.color.value,
+      lat: num(f.lat.value), lng: num(f.lng.value), radius: num(f.radius.value) || 150,
+      ...(f.payUnit.value === 'class' ? { payUnit: 'class' } : {}),
+      ...(f.noCount.checked ? { noCount: true } : {}),
+    };
+    if (!place.name) { toast('請填名稱'); return; }
+    const s = store.getSettings();
+    const places = s.places.filter((p) => p.name !== old.name && p.name !== place.name);
+    const at = s.places.findIndex((p) => p.name === old.name);
+    places.splice(at < 0 ? places.length : at, 0, place);
+    try {
+      await store.saveSettings({ ...s, places });
+      toast(old.name && old.name !== place.name ? '已儲存。注意：捷徑裡的地點名稱也要一起改' : '已儲存');
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    document.activeElement.blur(); render(); updateGps();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - state.lastSyncTry > 60000) doSync({ quiet: true });
+    if (state.tab === 'home') updateGps();
+  });
+  window.addEventListener('online', () => doSync({ quiet: true }));
+}
+
+// 每 15 秒更新：日期變了就整個重畫；有人上班中只更新打卡狀態和總覽
+function tick() {
+  const today = dateOf(nowString());
+  if (today !== state.today) {
+    if (state.month === monthOf(state.today)) state.month = monthOf(today);
+    state.today = today;
+    render();
+    return;
+  }
+  const ss = sessions();
+  if (ss.some((s) => s.status === 'working')) {
+    renderPunch();
+    if (state.tab === 'home') renderHome(ss);
+  }
+}
+
+bind();
+render();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+if (store.getConn()) doSync({ quiet: true });
+else { $('#tabs [data-tab=help]').click(); }
+updateGps();
+setInterval(tick, 15000);

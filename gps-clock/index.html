@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a78d6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="打卡工時">
+<title>打卡工時</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="src/styles.css?v=202611131618">
+</head>
+<body>
+<header class="top">
+  <h1>打卡工時</h1>
+  <button id="syncBtn" class="ghost small" type="button">同步</button>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="home" class="active">總覽</button>
+  <button data-tab="detail">明細</button>
+  <button data-tab="events">紀錄</button>
+  <button data-tab="money">支出</button>
+  <button data-tab="settings">設定</button>
+  <button data-tab="help">說明</button>
+</nav>
+
+<main>
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- 總覽 -->
+  <section id="tab-home" class="tab">
+    <div class="card punch">
+      <div id="punchStatus" class="punch-status">—</div>
+      <label class="field">地點
+        <select id="punchPlace"></select>
+      </label>
+      <div id="gpsInfo" class="muted small-text"></div>
+      <div class="row">
+        <button id="inBtn" class="primary" type="button">上班打卡</button>
+        <button id="outBtn" class="primary alt" type="button">下班打卡</button>
+      </div>
+      <div id="undoRow" class="undo" hidden>
+        <span id="undoText"></span>
+        <button id="undoBtn" class="ghost small" type="button">復原</button>
+      </div>
+    </div>
+
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="card tip" id="pendingList" hidden></div>
+    <div class="card"><h2>每日工時</h2><div id="chart" class="chart"></div></div>
+    <div class="card"><h2>各地點</h2><div id="byPlace"></div></div>
+  </section>
+
+  <!-- 明細 -->
+  <section id="tab-detail" class="tab" hidden>
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <div class="row between">
+      <label class="check"><input type="checkbox" id="onlyPending"> 只看待補</label>
+      <button id="exportBtn" class="ghost small" type="button">匯出 CSV</button>
+    </div>
+    <table class="sessions">
+      <thead><tr><th>日期</th><th>地點</th><th>上班</th><th>下班</th><th>時數</th><th>狀態</th><th></th></tr></thead>
+      <tbody id="sessionRows"></tbody>
+    </table>
+    <p id="noSessions" class="muted" hidden>這個月沒有資料。</p>
+  </section>
+
+  <!-- 紀錄 -->
+  <section id="tab-events" class="tab" hidden>
+    <div class="card">
+      <h2>手動新增</h2>
+      <form id="addForm" class="grid-form">
+        <label class="field">日期<input type="date" name="date" required></label>
+        <label class="field">時間<input type="time" name="clock" step="1" required></label>
+        <label class="field">類型<select name="kind"><option value="in">上班</option><option value="out">下班</option></select></label>
+        <label class="field">地點<select name="place" class="place-select" required></select></label>
+        <button class="primary" type="submit">新增</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>匯入 CSV</h2>
+      <p class="muted small-text">每行「時間,上班或下班,地點」。重複的不會再算一次。</p>
+      <input type="file" id="importFile" accept=".csv,.txt,text/csv,text/plain">
+      <textarea id="importText" rows="4" placeholder="2026-11-03 13:52:08,上班,板橋分校"></textarea>
+      <button id="importBtn" class="ghost" type="button">匯入貼上的文字</button>
+      <div id="importResult" class="muted small-text"></div>
+    </div>
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <ul id="eventList" class="event-list"></ul>
+    <div id="parseErrors" class="muted small-text"></div>
+  </section>
+
+  <!-- 支出 -->
+  <section id="tab-money" class="tab" hidden>
+    <div class="month-nav">
+      <button class="ghost small" data-month="-1" type="button">‹</button>
+      <strong class="month-label"></strong>
+      <button class="ghost small" data-month="1" type="button">›</button>
+    </div>
+    <div class="kpis" id="moneyKpis"></div>
+
+    <div class="card">
+      <h2 id="expFormTitle">記一筆</h2>
+      <form id="expForm" class="grid-form">
+        <label class="field">日期<input type="date" name="date" required></label>
+        <label class="field">金額<input type="number" name="amount" min="1" step="1" inputmode="numeric" placeholder="0" required></label>
+        <label class="field">類別<input name="category" list="expCats" autocomplete="off" placeholder="餐飲"></label>
+        <label class="field">備註<input name="note" autocomplete="off" placeholder="（選填）"></label>
+        <div class="cat-chips full" id="catChips"></div>
+        <button class="primary" type="submit">新增</button>
+        <button class="ghost" id="expCancel" type="button" hidden>取消修改</button>
+      </form>
+      <datalist id="expCats"></datalist>
+    </div>
+
+    <div class="card tip" id="inboxBad" hidden></div>
+    <div class="card"><h2>各類別</h2><div id="expByCat"></div></div>
+
+    <div class="card">
+      <h2>匯入發票／信用卡帳單</h2>
+      <details class="small-text"><summary>怎麼拿到檔案</summary>
+        <ul>
+          <li><b>手機條碼的電子發票</b>：到<a href="https://www.einvoice.nat.gov.tw/" target="_blank" rel="noopener">財政部電子發票整合服務平台</a>登入 › 個人（手機條碼）› 載具消費發票查詢 › 選月份查詢 › 「匯出 CSV」（會寄到你的信箱或直接下載）。</li>
+          <li><b>信用卡帳單</b>：在銀行網銀／App 的「帳單明細」或「未出帳消費」下載 CSV 或 Excel（Excel 請另存成 CSV）。也可以直接複製帳單表格貼到下面。</li>
+          <li>只要有「日期」和「金額」欄就能讀；類別會照店名自動猜，匯入前可以改。</li>
+          <li><b>刷卡又有發票的同一筆</b>會被標成「可能重複」、預設不勾。建議以發票為主（有品項），信用卡只補沒有發票的消費（例如國外、網購、保費）。</li>
+        </ul>
+      </details>
+      <input type="file" id="expImportFile" accept=".csv,.txt,text/csv,text/plain">
+      <textarea id="expImportText" rows="3" placeholder="或把帳單內容貼在這裡"></textarea>
+      <button id="expImportBtn" class="ghost" type="button">讀取貼上的內容</button>
+      <div id="expImportPreview"></div>
+    </div>
+
+    <p class="muted small-text">用 Apple Pay 付款想自動記帳？看「說明 › <a href="#help-pay" data-goto-help>Apple Pay 自動記帳</a>」。</p>
+    <div class="row between">
+      <h2 style="margin:0">本月明細</h2>
+      <button id="expExportBtn" class="ghost small" type="button">匯出 CSV</button>
+    </div>
+    <ul id="expList" class="event-list"></ul>
+
+    <div class="card">
+      <h2>固定支出</h2>
+      <p class="muted small-text">每個月都有的（房租、電話費、保險…）。從加入的月份起每月自動算進去；刪除後以前的月份不受影響。</p>
+      <ul id="fixedList" class="event-list"></ul>
+      <form id="fixedForm" class="grid-form" style="margin-top:10px">
+        <label class="field">名稱<input name="name" required placeholder="房租"></label>
+        <label class="field">每月金額<input type="number" name="amount" min="1" step="1" inputmode="numeric" required></label>
+        <label class="field">類別<input name="category" list="expCats" autocomplete="off" placeholder="房租"></label>
+        <label class="field">從哪個月開始<input type="month" name="from" required></label>
+        <button class="ghost full" type="submit">＋ 加入固定支出</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="tab-settings" class="tab" hidden>
+    <div class="card">
+      <h2>GitHub 連線</h2>
+      <form id="connForm" class="stack">
+        <label class="field">帳號<input name="owner" autocomplete="off" autocapitalize="off" placeholder="raykuan80-design" required></label>
+        <label class="field">私人存放庫<input name="repo" autocomplete="off" autocapitalize="off" placeholder="gps-clock-data" required></label>
+        <label class="field">分支（空白＝預設分支）<input name="branch" autocomplete="off" autocapitalize="off"></label>
+        <label class="field">Token<input name="token" type="password" autocomplete="off" placeholder="github_pat_…" required></label>
+        <p class="muted small-text">Token 只存在這支手機，不會上傳到任何地方。</p>
+        <div class="row">
+          <button class="primary" type="submit">連線並同步</button>
+          <button id="disconnectBtn" class="ghost danger" type="button">登出</button>
+        </div>
+        <div id="connResult" class="small-text"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>地點</h2>
+      <p class="muted small-text">名稱要和捷徑裡寫的完全一樣。設定座標後，網頁打卡會自動選最近的地點。</p>
+      <div id="placeList"></div>
+      <button id="addPlaceBtn" class="ghost" type="button">＋ 新增地點</button>
+    </div>
+
+    <div class="card">
+      <h2>課表</h2>
+      <p class="muted small-text">打卡時間裡和課表重疊的部分，會改算到上課的地點（薪資照那個地點的設定）。課表外的時間留在原本打卡的地點。</p>
+      <form id="scheduleForm" class="stack">
+        <textarea name="schedule" rows="12" spellcheck="false" placeholder="期間 2026-10-19 ~ 2026-12-13&#10;每週一 18:00-21:00 名揚 國二理化&#10;2026-10-19 停課 國二理化&#10;2026-10-26 13:30-16:30 名揚 國三理化（補課）"></textarea>
+        <div id="scheduleInfo" class="small-text"></div>
+        <details class="small-text"><summary>怎麼寫</summary>
+          <ul>
+            <li><code>期間 2026-10-19 ~ 2026-12-13</code>：每週固定課的有效期間</li>
+            <li><code>每週一 18:00-21:00 名揚 國二理化</code>：每週固定課（星期、時間、地點、課名）</li>
+            <li><code>2026-10-19 停課 國二理化</code>：這天停這堂課；只寫 <code>停課</code> 就是整天都停</li>
+            <li><code>2026-10-26 13:30-16:30 名揚 國三理化</code>：這天多一堂（補課、加課、調課）</li>
+            <li>每堂的錢寫在最後：<code>… 國二理化輔導 $1500</code>；不滿 3 小時要按比例就寫 <code>$3000/3h</code>（2.5 小時的課＝2500）</li>
+            <li>沒寫錢的課，用上面「地點」裡的薪資算；括號裡的字是備註</li>
+          </ul>
+        </details>
+        <button class="primary" type="submit">儲存課表</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>配對規則</h2>
+      <form id="rulesForm" class="stack">
+        <label class="field">GPS 飄移合併（分鐘內又上班算同一段）<input type="number" name="mergeGapMinutes" min="0" max="120" required></label>
+        <label class="field">太短不算（少於幾分鐘）<input type="number" name="minSessionMinutes" min="0" max="120" required></label>
+        <button class="primary" type="submit">儲存規則</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- 說明 -->
+  <section id="tab-help" class="tab" hidden>
+    <div class="card prose">
+      <h2>1. 建立 GitHub Token</h2>
+      <ol>
+        <li>打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub › 新增 Fine-grained token</a>。</li>
+        <li>Token name 填「打卡」，Expiration 選最長。</li>
+        <li>Repository access 選「Only select repositories」，只勾你的紀錄存放庫（例如 <code>gps-clock-data</code>）。</li>
+        <li>Permissions › Repository permissions › <b>Contents</b> 選「Read and write」。</li>
+        <li>按「Generate token」，複製 <code>github_pat_</code> 開頭的那串文字。</li>
+        <li>回到「設定」分頁填入帳號、存放庫和 Token，按「連線並同步」。</li>
+      </ol>
+
+      <h2>2. 加入主畫面</h2>
+      <p>用 Safari 開這個網頁，點「分享」›「加入主畫面」。之後從主畫面圖示打開。</p>
+
+      <h2>3. 建立捷徑「寫入打卡」（只要做一次）</h2>
+      <p>打開「捷徑」App › 右上角 ＋ 新增捷徑，名稱改成「寫入打卡」。依序加入下面的動作（在動作搜尋列輸入引號裡的關鍵字）：</p>
+      <ol>
+        <li>搜尋「<b>格式化日期</b>」：點藍色的「日期」改選變數「<b>目前日期</b>」（不要在這裡打字），再把「日期格式」改成「<b>自訂</b>」，在下面多出來的格式欄位填入
+          <div class="copy"><code>yyyy-MM-dd HH:mm:ss</code><button class="ghost small" data-copy="yyyy-MM-dd HH:mm:ss" type="button">複製</button></div></li>
+        <li>搜尋「<b>文字</b>」：內容是「格式化的日期」變數、一個<b>半形逗號 <code>,</code></b>、再接「捷徑輸入」變數，看起來像 <code>[格式化的日期],[捷徑輸入]</code>。逗號不能少。</li>
+        <li>搜尋「<b>Base64</b>」：選「編碼」，輸入是上一步的「文字」。點開「顯示更多」，換行選「無」。</li>
+        <li>再加一個「<b>格式化日期</b>」：一樣選變數「目前日期」、日期格式「自訂」，格式欄位填
+          <div class="copy"><code>yyyyMMdd-HHmmss</code><button class="ghost small" data-copy="yyyyMMdd-HHmmss" type="button">複製</button></div></li>
+        <li>搜尋「<b>取得 URL 內容</b>」，網址先貼上下面這串（複製按鈕只會複製到 <code>punches/</code>），接著插入第 4 步的「格式化的日期」變數，最後再打 <code>.csv</code>：
+          <div class="copy"><code id="shortcutUrl"></code><button class="ghost small" id="copyUrl" type="button">複製</button></div>
+          點開「顯示更多」：
+          <ul>
+            <li>方法：<b>PUT</b></li>
+            <li>標頭：新增兩個
+              <div class="copy"><code>Authorization</code> ＝ <code>Bearer github_pat_…</code>（Bearer 後面一個空格，再貼上你真正的 Token）</div>
+              <div class="copy"><code>Accept</code> ＝ <code>application/vnd.github+json</code><button class="ghost small" data-copy="application/vnd.github+json" type="button">複製</button></div></li>
+            <li>請求本文：<b>JSON</b>，新增兩個文字欄位：<code>message</code> ＝ <code>打卡</code>，<code>content</code> ＝ 第 3 步的「Base64 編碼結果」。</li>
+          </ul></li>
+      </ol>
+      <p>做好後可以先手動執行一次測試：點捷徑會要求輸入，填 <code>上班,測試</code>，然後回網頁按「同步」，應該會看到一筆「測試」的上班紀錄（測完到「紀錄」分頁刪掉）。</p>
+
+      <h2>4. 每個地點建立兩個自動化</h2>
+      <ol>
+        <li>捷徑 App › 自動化 › ＋ › 「抵達」，選地點（例如補習班），勾「立即執行」。</li>
+        <li>動作加「<b>文字</b>」，內容填 <code>上班,地點名稱</code>（例如 <code>上班,板橋分校</code>）。</li>
+        <li>再加「<b>執行捷徑</b>」，選「寫入打卡」，輸入是上一步的「文字」。</li>
+        <li>再建一個「離開」自動化，文字改成 <code>下班,地點名稱</code>。</li>
+      </ol>
+
+      <h2 id="help-pay">5. Apple Pay 自動記帳（iOS 17 以上）</h2>
+      <p>每次用 Apple Pay 付款，自動把金額和店名記進「支出」。只要做一次：</p>
+      <ol>
+        <li><b>複製捷徑</b>：在捷徑 App 長按「寫入打卡」› 「複製」，把複本改名成「<b>寫入支出</b>」。</li>
+        <li>打開「寫入支出」，只改「取得 URL 內容」的網址：把裡面的 <code>punches/</code> 改成 <code>expenses/inbox/</code>，後面的「格式化的日期」和 <code>.csv</code> 不動。改好的網址開頭像這樣：
+          <div class="copy"><code id="payUrl"></code><button class="ghost small" id="copyPayUrl" type="button">複製</button></div></li>
+        <li><b>建立自動化</b>：捷徑 App › 自動化 › ＋ › 「<b>交易</b>」› 勾選你所有的卡片 › 選「<b>立即執行</b>」› 下一步 › 新增空白自動化。</li>
+        <li>加「<b>文字</b>」動作：插入變數「捷徑輸入」，點它改選「<b>金額</b>」；打一個半形逗號 <code>,</code>；再插入「捷徑輸入」改選「<b>商家</b>」。看起來像 <code>[金額],[商家]</code>。想記是哪張卡，可以再加逗號和「卡片」或「名稱」。</li>
+        <li>再加「<b>執行捷徑</b>」，選「寫入支出」，輸入是上一步的「文字」。</li>
+      </ol>
+      <p>測試：手動執行「寫入支出」，輸入 <code>100,測試商店</code>，回網頁按「同步」，「支出」分頁應該會多一筆 $100 的「測試商店」（測完刪掉）。</p>
+      <p class="muted small-text">付款後消費先存在紀錄存放庫的 <code>expenses/inbox/</code>，打開網頁或按「同步」時才會搬進當月支出並猜好類別。實體卡刷卡、網購輸入卡號不會觸發，這些用「支出 › 匯入」補。</p>
+
+      <h2>注意事項</h2>
+      <ul>
+        <li>地點名稱在捷徑和「設定 › 地點」裡必須一字不差。</li>
+        <li>手機要開「定位服務」，捷徑 App 的定位權限選「永遠」。</li>
+        <li>沒網路時自動化會失敗；可以在網頁手動補打卡。網頁上打的卡在沒網路時會先存在手機，下次同步再上傳。</li>
+        <li>紀錄存在你的私人存放庫 <code>punches/</code> 資料夾，每次打卡一個檔案，可以直接在 GitHub 上看。</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<dialog id="fixDialog">
+  <form id="fixForm" method="dialog" class="stack">
+    <h2>補打卡</h2>
+    <p id="fixHint" class="muted small-text"></p>
+    <label class="field">地點<input name="place" readonly></label>
+    <label class="field">類型<select name="kind"><option value="in">上班</option><option value="out">下班</option></select></label>
+    <label class="field">日期<input type="date" name="date" required></label>
+    <label class="field">時間<input type="time" name="clock" step="1" required></label>
+    <div class="row">
+      <button class="primary" value="ok" type="submit">補上</button>
+      <button class="ghost" value="cancel" formnovalidate type="submit">取消</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="src/app.js?v=202611131618"></script>
+</body>
+</html>
