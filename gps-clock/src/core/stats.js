@@ -1,6 +1,6 @@
 // 月統計、薪資、匯出 CSV
-import { daysInMonth, hours, hm } from './time.js?v=202611131618';
-import { counts, isPending, STATUS_LABEL } from './pairing.js?v=202611131618';
+import { daysInMonth, hours, hm } from './time.js?v=202611150146';
+import { counts, isPending, STATUS_LABEL } from './pairing.js?v=202611150146';
 
 /**
  * @returns { totalSec, days, avgSec, pending, byPlace:[{place,seconds,classes,wage,perClass,pay}], daily:[{date, byPlace:{place:sec}, total}], pay, classSec }
@@ -36,7 +36,8 @@ export function monthStats(sessions, month, places = []) {
     } else if (s.classStart) {
       const k = `${s.place}|${s.classStart}`;
       if (!paidClass.has(k)) { paidClass.add(k); placeCnt.set(s.place, (placeCnt.get(s.place) || 0) + 1); }
-    } else placeCnt.set(s.place, (placeCnt.get(s.place) || 0) + 1);
+    } else if (!(s.split && perClass.has(s.place))) placeCnt.set(s.place, (placeCnt.get(s.place) || 0) + 1);
+    // ↑ 按堂計薪的地點：課和課之間的空檔（split）只記時數，不算一堂
     totalSec += s.seconds;
     if (s.course) classSec += s.seconds;
     const day = daily[+s.date.slice(8, 10) - 1];

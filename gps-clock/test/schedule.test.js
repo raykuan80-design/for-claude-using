@@ -154,3 +154,43 @@ test('上課不會不見：沒打到卡的課照課表補上（只補已經上�
   const my = st.byPlace.find((p) => p.place === '名揚');
   assert.equal(my.classes, 3); // 11/2、11/6、11/7 加課（拆兩段只算一堂）
 });
+
+test('A 地上班、B 地下班：配成同一班，照課表拆到兩地', () => {
+  const sched = parseSchedule(`每週六 10:00-12:00 高群 國二理化輔導 $1500
+每週六 13:30-16:00 同德 小五小牛頓 $3000/3h`);
+  const ev = [
+    { time: '2026-11-14 10:00:00', type: 'in', place: '高群' },
+    { time: '2026-11-14 16:30:00', type: 'out', place: '同德' },
+  ];
+  const raw = pairSessions(ev, {}, '2026-11-15 10:00:00');
+  assert.deepEqual(raw.map((s) => [s.place, s.endPlace, s.status, s.seconds / 3600]), [['高群', '同德', 'normal', 6.5]]);
+  const ss = applySchedule(raw, sched);
+  assert.deepEqual(ss.map((s) => [s.place, s.start.slice(11, 16), s.end.slice(11, 16), s.course || '']), [
+    ['高群', '10:00', '12:00', '國二理化輔導'],
+    ['高群', '12:00', '13:30', ''],
+    ['同德', '13:30', '16:00', '小五小牛頓'],
+    ['同德', '16:00', '16:30', ''],
+  ]);
+  const st = monthStats(ss, '2026-11', [{ name: '高群', wage: 3000, payUnit: 'class' }, { name: '同德', wage: 3000, payUnit: 'class' }]);
+  assert.equal(st.pending, 0);
+  assert.equal(st.pay, 4000);
+  assert.deepEqual(st.byPlace.map((p) => [p.place, p.classes]).sort(), [['同德', 1], ['高群', 1]]);
+});
+
+test('不同地點：中間有別的打卡就不配', () => {
+  const r = pairSessions([
+    { time: '2026-11-14 10:00:00', type: 'in', place: '高群' },
+    { time: '2026-11-14 12:00:00', type: 'in', place: '鼎盛' },
+    { time: '2026-11-14 14:00:00', type: 'out', place: '鼎盛' },
+    { time: '2026-11-14 16:30:00', type: 'out', place: '同德' },
+  ], {}, '2026-11-15 10:00:00');
+  assert.deepEqual(r.map((s) => s.status), ['missingOut', 'normal', 'missingIn']);
+});
+
+test('不同地點：隔天白天才下班的不配，照樣顯示缺打卡', () => {
+  const r = pairSessions([
+    { time: '2026-11-14 18:00:00', type: 'in', place: '高群' },
+    { time: '2026-11-15 10:00:00', type: 'out', place: '同德' },
+  ], {}, '2026-11-16 10:00:00');
+  assert.deepEqual(r.map((s) => s.status), ['missingOut', 'missingIn']);
+});

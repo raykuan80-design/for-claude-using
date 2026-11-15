@@ -1,5 +1,5 @@
 // 工時配對（純函式）。把打卡事件配成工作時段。
-import { toSec, fromSec, dateOf } from './time.js?v=202611131618';
+import { toSec, fromSec, dateOf } from './time.js?v=202611150146';
 
 export const DEFAULT_RULES = { mergeGapMinutes: 10, minSessionMinutes: 5 };
 const MAX_OPEN_SEC = 20 * 3600; // 偶爾會做到 16 小時以上（例如 14:00 到隔天 06:19）
@@ -121,11 +121,39 @@ export function pairSessions(events, rules = {}, now) {
     }
   }
 
+  joinAcrossPlaces(result, minSessionMinutes);
   result.sort((a, b) => {
     const ka = a.start || a.end, kb = b.start || b.end;
     return ka < kb ? -1 : ka > kb ? 1 : a.place.localeCompare(b.place);
   });
   return result;
+}
+
+/**
+ * A 地上班、B 地下班：A 的「缺下班」和之後 B 的「缺上班」配成同一班（20 小時內，中間沒有別的打卡）。
+ * 合併後 place 是上班地點，endPlace 是下班地點。直接改 result。
+ */
+function joinAcrossPlaces(result, minSessionMinutes) {
+  const outs = result.filter((s) => (s.status === 'missingOut' || s.status === 'working') && s.start && !s.end);
+  for (const a of outs) {
+    const t0 = toSec(a.start);
+    const cands = result.filter((b) => b.status === 'missingIn' && b.place !== a.place
+      && toSec(b.end) > t0 && toSec(b.end) - t0 <= MAX_OPEN_SEC
+      // 只配同一天（或隔天凌晨 6 點前）的下班；真的漏打的照樣顯示缺打卡
+      && (dateOf(b.end) === dateOf(a.start) || (toSec(b.end) - t0 < 86400 && +b.end.slice(11, 13) < 6)))
+      .sort((x, y) => (x.end < y.end ? -1 : 1));
+    const b = cands[0];
+    if (!b) continue;
+    // 中間有別的完整打卡就不配（代表那段時間在別處上過班）
+    if (result.some((s) => s !== a && s !== b && s.start && s.start > a.start && s.start < b.end)) continue;
+    const seconds = toSec(b.end) - t0;
+    Object.assign(a, {
+      end: b.end, endPlace: b.place, seconds, lastOut: null,
+      status: seconds < minSessionMinutes * 60 ? 'ignored' : 'normal',
+      manual: a.manual || b.manual, events: [...a.events, ...b.events],
+    });
+    result.splice(result.indexOf(b), 1);
+  }
 }
 
 /** 這個時段是否計入工時 */

@@ -6,7 +6,7 @@
 //   2026-10-19 停課 國二理化              這天停某堂課（寫課名或地點；只寫「停課」= 當天全停）
 //   2026-10-26 13:30-16:30 名揚 國三理化  這天多一堂課（補課、加課、調課）
 //   # 開頭是註解
-import { toSec, fromSec, isValid, pad } from './time.js?v=202611131618';
+import { toSec, fromSec, isValid, pad } from './time.js?v=202611150146';
 
 const WD = '日一二三四五六';
 const TIME = /^(\d{1,2})[:：](\d{2})\s*[-–－~～到至]\s*(\d{1,2})[:：](\d{2})$/;
@@ -162,6 +162,12 @@ export function applySchedule(sessions, sched, skipPlaces = new Set(), now) {
       cur = c.b;
     }
     if (b > cur) out.push(piece(cur, b, { split: true }));
+    // A 地上班、B 地下班：B 地第一堂課開始後的空檔算 B 地
+    if (s.endPlace) {
+      const firstB = overlaps.find((c) => c.place === s.endPlace);
+      const at = firstB ? firstB.a : Infinity;
+      for (const p of out) if (p.origin === s && p.split && toSec(p.start) >= at) p.place = s.endPlace;
+    }
   }
   if (now) out.push(...fillClasses(out, sched, now));
   return out.sort((x, y) => {

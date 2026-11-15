@@ -1,12 +1,12 @@
 // 畫面與操作
-import * as store from './store.js?v=202611131618';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611131618';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611131618';
-import { nearestPlace } from './core/geo.js?v=202611131618';
-import { typeLabel } from './core/parse.js?v=202611131618';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611131618';
-import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611131618';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611131618';
+import * as store from './store.js?v=202611150146';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611150146';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611150146';
+import { nearestPlace } from './core/geo.js?v=202611150146';
+import { typeLabel } from './core/parse.js?v=202611150146';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611150146';
+import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611150146';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611150146';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -213,7 +213,7 @@ function renderDetail(ss) {
       `<div class="class-line"><span class="dot" style="background:${store.colorOf(p.place)}"></span>${esc(p.place)} ${esc(p.course)}${p.price != null ? ` $${p.price.toLocaleString()}` : ''} ${hm(p.start)}–${p.end ? hm(p.end) : '現在'}（${formatDuration(p.seconds)}）</div>`).join('');
     const fix = isPending(s) ? `<button class="ghost small" data-fix="${idx}" type="button">補打卡</button>` : '';
     return `<tr>
-      <td data-k="date">${s.date.slice(5)} <span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}</td>
+      <td data-k="date">${s.date.slice(5)} <span class="dot" style="background:${store.colorOf(s.place)}"></span>${esc(s.place)}${s.endPlace ? ` → ${esc(s.endPlace)}` : ''}</td>
       <td data-k="status"><span class="status ${s.status}">${STATUS_LABEL[s.status]}</span>${s.manual ? '<span class="tag">手動</span>' : ''}</td>
       <td data-k="time">${s.start ? hm(s.start) : '--:--'} – ${s.end ? hm(s.end) : '--:--'}${s.end && s.start && dateOf(s.end) !== s.date ? '（隔天）' : ''}${cls ? `<div class="classes">上課：${cls}</div>` : ''}</td>
       <td data-k="hours">${counts(s) ? formatDuration(s.seconds) : ''}</td>
