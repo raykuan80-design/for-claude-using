@@ -1,12 +1,12 @@
 // 畫面與操作
-import * as store from './store.js?v=202611150146';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611150146';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611150146';
-import { nearestPlace } from './core/geo.js?v=202611150146';
-import { typeLabel } from './core/parse.js?v=202611150146';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611150146';
-import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611150146';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611150146';
+import * as store from './store.js?v=202611150151';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611150151';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611150151';
+import { nearestPlace } from './core/geo.js?v=202611150151';
+import { typeLabel } from './core/parse.js?v=202611150151';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611150151';
+import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611150151';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611150151';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -875,8 +875,28 @@ function tick() {
   }
 }
 
+/**
+ * 有新版就自動換：version.json 不走快取，跟自己載入時的版本號比，不一樣就帶 ?v= 重開
+ * （網址不同，手機就不會拿快取的舊 index.html）。
+ */
+async function checkVersion() {
+  try {
+    const mine = new URL(import.meta.url).searchParams.get('v');
+    if (!mine) return;
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (v && v !== mine && sessionStorage.getItem('gps-clock-reloaded') !== v) {
+      sessionStorage.setItem('gps-clock-reloaded', v);
+      location.replace(location.pathname + '?v=' + v + location.hash);
+    }
+  } catch { /* 離線就算了 */ }
+}
+
 bind();
 render();
+checkVersion();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 if (store.getConn()) doSync({ quiet: true });
 else { $('#tabs [data-tab=help]').click(); }

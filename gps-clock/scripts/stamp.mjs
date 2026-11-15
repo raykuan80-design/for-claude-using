@@ -18,4 +18,5 @@ for (const f of files) {
     .replace(/((?:src|href)="src\/[^"?]+\.(?:js|css))(\?v=\w*)?"/g, `$1?v=${v}"`);
   if (out !== s) writeFileSync(p, out);
 }
+writeFileSync(join(root, 'version.json'), JSON.stringify({ v }) + '\n');
 console.log('version', v);
