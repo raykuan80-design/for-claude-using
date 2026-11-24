@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="stylesheet" href="src/styles.css?v=202611150151">
+<link rel="stylesheet" href="src/styles.css?v=202611241059">
 </head>
 <body>
 <header class="top">
@@ -127,6 +127,16 @@
         <button class="ghost" id="expCancel" type="button" hidden>取消修改</button>
       </form>
       <datalist id="expCats"></datalist>
+    </div>
+
+    <div class="card">
+      <h2>借出去的款項</h2>
+      <ul id="loanList" class="event-list"></ul>
+      <form id="loanForm" class="grid-form" style="margin-top:10px">
+        <label class="field">借錢的人<input name="name" required autocomplete="off" placeholder="姓名"></label>
+        <label class="field">金額<input type="number" name="amount" min="1" step="1" inputmode="numeric" placeholder="0" required></label>
+        <button class="ghost full" type="submit">＋ 新增借出</button>
+      </form>
     </div>
 
     <div class="card tip" id="inboxBad" hidden></div>
@@ -310,6 +320,6 @@
 </dialog>
 
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="src/app.js?v=202611150151"></script>
+<script type="module" src="src/app.js?v=202611241059"></script>
 </body>
 </html>

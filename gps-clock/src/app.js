@@ -1,12 +1,12 @@
 // 畫面與操作
-import * as store from './store.js?v=202611150151';
-import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611150151';
-import { monthStats, sessionsCsv } from './core/stats.js?v=202611150151';
-import { nearestPlace } from './core/geo.js?v=202611150151';
-import { typeLabel } from './core/parse.js?v=202611150151';
-import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611150151';
-import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611150151';
-import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611150151';
+import * as store from './store.js?v=202611241059';
+import { pairSessions, STATUS_LABEL, isPending, counts } from './core/pairing.js?v=202611241059';
+import { monthStats, sessionsCsv } from './core/stats.js?v=202611241059';
+import { nearestPlace } from './core/geo.js?v=202611241059';
+import { typeLabel } from './core/parse.js?v=202611241059';
+import { parseSchedule, applySchedule, classesOn, uncoveredClasses } from './core/schedule.js?v=202611241059';
+import { DEFAULT_CATEGORIES, cleanExpense, expenseStats, expensesCsv, newId, parseImport, markImport } from './core/expenses.js?v=202611241059';
+import { nowString, monthOf, dateOf, hm, shiftMonth, formatDuration, hours, isValid } from './core/time.js?v=202611241059';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -293,6 +293,14 @@ function renderMoney(ss) {
       <span class="exp-amt">${money(x.amount)}</span>
       <button class="ghost small danger" data-delfixed="${esc(x.id)}" type="button">刪除</button></li>`).join('')
     : '<li class="empty">還沒有固定支出。</li>';
+  const loans = settings.loans || [];
+  const loanTotal = loans.reduce((a, x) => a + x.amount, 0);
+  $('#loanList').innerHTML = loans.length ? loans.map((x) => `<li>
+      <span><b>${esc(x.name)}</b> <span class="muted small-text">${x.date ? `${+x.date.slice(5, 7)}/${+x.date.slice(8)}` : ''}</span></span>
+      <span class="exp-amt">${money(x.amount)}</span>
+      <button class="ghost small danger" data-delloan="${esc(x.id)}" type="button">刪除</button></li>`).join('')
+      + `<li><span class="muted">合計</span><span class="exp-amt">${money(loanTotal)}</span></li>`
+    : '<li class="empty">目前沒有借出去的錢。</li>';
   const bad = store.inboxBad();
   $('#inboxBad').hidden = !bad.length;
   $('#inboxBad').innerHTML = bad.length ? `<p class="small-text">Apple Pay 捷徑寫入的這幾筆看不懂（要是「金額,商家」）：</p>` + bad.map((x, i) =>
@@ -730,6 +738,33 @@ function bind() {
         : x.from >= state.month ? [] : [{ ...x, to: prev }]);
       await store.saveSettings({ ...s, fixedExpenses: list });
       toast(`已刪除，${state.month.replace('-', '/')} 起不再計入`);
+      render();
+    });
+  });
+
+  $('#loanForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!store.getConn()) { toast('先到「設定」連上 GitHub'); return; }
+    const f = e.target.elements;
+    const amount = Math.round(Number(f.amount.value));
+    if (!(amount > 0)) { toast('金額要大於 0'); return; }
+    const name = f.name.value.trim();
+    if (!name) { toast('要填借錢的人'); return; }
+    const s = store.getSettings();
+    try {
+      await store.saveSettings({ ...s, loans: [...(s.loans || []), { id: newId(), name, amount, date: state.today }] });
+      toast(`已記下：借給 ${name} ${money(amount)}`);
+      e.target.reset();
+    } catch (err) { toast('儲存失敗：' + errMsg(err)); }
+    render();
+  });
+  $('#loanList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-delloan]');
+    if (!b) return;
+    twoStep(b, async () => {
+      const s = store.getSettings();
+      await store.saveSettings({ ...s, loans: (s.loans || []).filter((x) => x.id !== b.dataset.delloan) });
+      toast('已刪除');
       render();
     });
   });
